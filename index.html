@@ -310,11 +310,14 @@ async function fbGetAll(col) {
 // ── Auth ──
 function signInWithGoogle() {
   const provider = new firebase.auth.GoogleAuthProvider();
-  // redirect 방식으로 통일 (모바일/PC 모두)
-  auth.signInWithRedirect(provider).catch(e => {
-    console.error(e);
-    showToast('❌ 로그인 실패: ' + e.message);
-  });
+  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  if (isMobile) {
+    auth.signInWithRedirect(provider);
+  } else {
+    auth.signInWithPopup(provider).then(() => startApp()).catch(e => {
+      showToast('❌ 로그인 실패: ' + e.message);
+    });
+  }
 }
 function signOut() {
   if (confirm('로그아웃 하시겠어요?')) auth.signOut();
@@ -323,34 +326,43 @@ function signOut() {
 document.getElementById('loginOverlay').classList.add('hidden');
 document.getElementById('loadingScreen').style.display = '';
 
+async function showMain(user) {
+  currentUser = user;
+  document.getElementById('loginOverlay').classList.add('hidden');
+  document.getElementById('userBtn').style.display = '';
+  document.getElementById('userAvatar').src = user.photoURL || '';
+  document.getElementById('userName').textContent = user.displayName || user.email;
+  document.getElementById('loadingScreen').style.display = 'none';
+  await loadAndRender();
+}
+
+function showLogin() {
+  document.getElementById('loadingScreen').style.display = 'none';
+  document.getElementById('loginOverlay').classList.remove('hidden');
+  document.getElementById('userBtn').style.display = 'none';
+  document.getElementById('mainContent').style.display = 'none';
+  document.getElementById('weightPanel').style.display = 'none';
+}
+
 async function startApp() {
-  // 1) redirect 결과 먼저 처리
+  // 모바일 redirect 결과 먼저 확인
   try {
     const result = await auth.getRedirectResult();
     if (result && result.user) {
-      // redirect 로그인 성공 → 바로 진행
+      await showMain(result.user);
+      return;
     }
   } catch(e) { console.error('redirect error:', e); }
 
-  // 2) 현재 로그인 상태 한 번만 확인
+  // 현재 세션 확인
   const user = await new Promise(resolve => {
     const unsub = auth.onAuthStateChanged(u => { unsub(); resolve(u); });
   });
 
   if (user) {
-    currentUser = user;
-    document.getElementById('loginOverlay').classList.add('hidden');
-    document.getElementById('userBtn').style.display = '';
-    document.getElementById('userAvatar').src = user.photoURL || '';
-    document.getElementById('userName').textContent = user.displayName || user.email;
-    document.getElementById('loadingScreen').style.display = 'none';
-    await loadAndRender();
+    await showMain(user);
   } else {
-    document.getElementById('loadingScreen').style.display = 'none';
-    document.getElementById('loginOverlay').classList.remove('hidden');
-    document.getElementById('userBtn').style.display = 'none';
-    document.getElementById('mainContent').style.display = 'none';
-    document.getElementById('weightPanel').style.display = 'none';
+    showLogin();
   }
 }
 
