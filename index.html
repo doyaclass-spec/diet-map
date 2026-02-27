@@ -317,21 +317,14 @@ function signInWithGoogle() {
 function signOut() {
   if (confirm('로그아웃 하시겠어요?')) auth.signOut();
 }
-// 모바일 redirect 로그인 후 결과 처리
-auth.getRedirectResult().then(result => {
-  // redirect 결과는 onAuthStateChanged가 자동으로 처리하므로 별도 처리 불필요
-}).catch(e => {
-  if (e.code !== 'auth/no-current-user') console.error('redirect 오류:', e);
-});
-
-auth.onAuthStateChanged(async user => {
+async function handleUser(user) {
   if (user) {
     currentUser = user;
     document.getElementById('loginOverlay').classList.add('hidden');
     document.getElementById('userBtn').style.display = '';
     document.getElementById('userAvatar').src = user.photoURL || '';
     document.getElementById('userName').textContent = user.displayName || user.email;
-    await loadAndRender();
+    if (!document.getElementById('mainContent').children.length) await loadAndRender();
   } else {
     currentUser = null;
     document.getElementById('loginOverlay').classList.remove('hidden');
@@ -340,6 +333,14 @@ auth.onAuthStateChanged(async user => {
     document.getElementById('weightPanel').style.display = 'none';
     document.getElementById('loadingScreen').style.display = 'none';
   }
+}
+
+auth.getRedirectResult().then(async result => {
+  if (result && result.user) await handleUser(result.user);
+}).catch(e => console.error('redirect 오류:', e));
+
+auth.onAuthStateChanged(async user => {
+  await handleUser(user);
 });
 
 // ── 상수 & 전역 ──
