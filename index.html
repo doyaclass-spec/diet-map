@@ -88,17 +88,22 @@ canvas#weightChart{width:100%;height:200px;display:block;border-radius:10px;}
 .day-card.done .meal-time-btn{pointer-events:none;}
 .day-card.done .add-note-btn,.day-card.done .food-add-btn{display:none;}
 .day-card.done .meal-time-clear{display:none;}
-.day-card.done .day-footer{display:none;}
+.day-card.done .day-footer{opacity:0.6;pointer-events:none;}
+/* 접힌 상태 - 헤더만 보임 */
 .day-card.collapsed .meal-grid,.day-card.collapsed .day-footer,.day-card.collapsed .finish-row{display:none;}
-.day-card.collapsed .day-header{margin-bottom:0;}
-.finish-btn{margin-top:10px;width:100%;padding:9px;border:none;background:linear-gradient(135deg,#B8934A,#D4A85C);color:#fff;font-family:'Noto Serif KR',serif;font-size:13px;font-weight:700;border-radius:10px;cursor:pointer;transition:opacity .2s;box-shadow:0 2px 8px rgba(184,147,74,.3);}
+.day-card.collapsed .day-header{margin-bottom:0;cursor:pointer;}
+/* finish-row */
+.finish-row{margin-top:10px;display:flex;gap:8px;align-items:center;}
+.finish-btn{flex:1;padding:10px;border:none;background:linear-gradient(135deg,#B8934A,#D4A85C);color:#fff;font-family:'Noto Serif KR',serif;font-size:13px;font-weight:700;border-radius:10px;cursor:pointer;transition:opacity .2s;box-shadow:0 2px 8px rgba(184,147,74,.3);}
 .finish-btn:hover{opacity:.85;}
-.finish-row{margin-top:8px;}
-.done-badge{display:none;font-size:11px;color:var(--gold);font-weight:600;padding:2px 0;}
+.edit-btn{padding:10px 14px;border:1px solid var(--border);background:transparent;color:var(--text2);font-family:'Noto Serif KR',serif;font-size:12px;border-radius:10px;cursor:pointer;white-space:nowrap;transition:border-color .15s;}
+.edit-btn:hover{border-color:var(--gold);color:var(--gold);}
+.done-badge{display:none;font-size:12px;color:var(--gold);font-weight:600;flex:1;}
+.expand-btn{padding:6px 12px;border:1px solid var(--border);background:none;color:var(--text3);font-size:11px;cursor:pointer;border-radius:6px;transition:border-color .15s,color .15s;white-space:nowrap;}
+.expand-btn:hover{color:var(--gold);border-color:var(--gold);}
 .day-card.done .finish-btn{display:none;}
 .day-card.done .done-badge{display:flex;align-items:center;gap:4px;}
-.expand-btn{background:none;border:1px solid var(--border);color:var(--text3);font-size:11px;cursor:pointer;padding:3px 10px;border-radius:6px;transition:border-color .15s,color .15s;}
-.expand-btn:hover{color:var(--gold);border-color:var(--gold);}
+.day-card.done .finish-row{display:flex;}
 /* 과거기록 패널 */
 .history-panel{max-width:980px;margin:20px auto 0;padding:0 16px;}
 .history-box{background:var(--surface);border:1px solid var(--border);border-radius:18px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.04);}
@@ -855,37 +860,63 @@ function render(dates){
         inner.appendChild(sw); inner.appendChild(buildFoodNotes(date,meal));
         col.appendChild(inner); grid.appendChild(col);
       });
-      // 끝내기 버튼
+      // ── 끝내기 / 수정 / 펼치기 버튼 ──
       const finishRow = document.createElement('div');
       finishRow.className = 'finish-row';
 
+      // 완료 배지
       const doneBadge = document.createElement('div');
-      doneBadge.className = 'done-badge'; doneBadge.innerHTML = '✅ 기록 완료&nbsp;';
+      doneBadge.className = 'done-badge';
+      doneBadge.innerHTML = '✅ 기록 완료';
 
-      const expandBtn = document.createElement('button');
-      expandBtn.className = 'expand-btn'; expandBtn.textContent = '펼치기 ▼';
-      expandBtn.onclick = () => {
+      // 수정하기 버튼 (완료 후 표시)
+      const editBtn = document.createElement('button');
+      editBtn.className = 'edit-btn'; editBtn.textContent = '✏️ 수정';
+      editBtn.onclick = async () => {
+        card.classList.remove('done');
         card.classList.remove('collapsed');
+        await fbPut('notes', `${dk}:done`, 'false');
       };
 
-      doneBadge.appendChild(expandBtn);
-
+      // 완료 버튼
       const finishBtn = document.createElement('button');
-      finishBtn.className = 'finish-btn'; finishBtn.textContent = '✅ 기록 완료 · 접기';
+      finishBtn.className = 'finish-btn'; finishBtn.textContent = '✅ 기록 완료';
       finishBtn.onclick = async () => {
         card.classList.add('done');
         card.classList.add('collapsed');
         await fbPut('notes', `${dk}:done`, 'true');
-        updateHistoryPanel();
+        // 다음 미완료 날짜로 스크롤
+        setTimeout(() => {
+          const nextCard = document.querySelector('.day-card:not(.done):not(.collapsed)');
+          if(nextCard) nextCard.scrollIntoView({behavior:'smooth', block:'start'});
+        }, 300);
       };
 
-      finishRow.appendChild(doneBadge);
-      finishRow.appendChild(finishBtn);
-      card.appendChild(buildDayFooter(date)); card.appendChild(finishRow);
+      // 펼치기 버튼 (접힌 상태에서 헤더 클릭)
+      const expandBtn = document.createElement('button');
+      expandBtn.className = 'expand-btn'; expandBtn.textContent = '펼치기 ▼';
+      expandBtn.onclick = () => card.classList.remove('collapsed');
 
-      // 완료 상태 & 이전날 자동접기 적용
-      if(notesCache[`${dk}:done`]==='true'){
+      doneBadge.appendChild(editBtn);
+      finishRow.appendChild(doneBadge);
+      finishRow.appendChild(expandBtn);
+      finishRow.appendChild(finishBtn);
+
+      card.appendChild(buildDayFooter(date));
+      card.appendChild(finishRow);
+
+      // 헤더 클릭으로도 펼치기
+      header.onclick = () => {
+        if(card.classList.contains('collapsed')) card.classList.remove('collapsed');
+      };
+
+      // 완료 상태 적용 — 오늘은 절대 접지 않음
+      const isDone = notesCache[`${dk}:done`] === 'true';
+      if(isDone) {
         card.classList.add('done');
+        if(!today) card.classList.add('collapsed');
+      } else if(!today) {
+        // 완료 안 된 과거 날짜도 접기
         card.classList.add('collapsed');
       }
 
