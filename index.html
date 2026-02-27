@@ -92,7 +92,7 @@ canvas#weightChart{width:100%;height:200px;display:block;border-radius:10px;}
 .collapse-hint-btn { font-size:11px; color:var(--gold); background:none; border:1px solid var(--gold); border-radius:6px; padding:3px 10px; cursor:pointer; }
 /* finish-row: 펼쳐진 상태에서만 표시 */
 .finish-row { margin-top:10px; display:flex; gap:8px; align-items:center; }
-.finish-btn { flex:1; padding:10px; border:none; background:linear-gradient(135deg,#B8934A,#D4A85C); color:#fff; font-family:'Noto Serif KR',serif; font-size:13px; font-weight:700; border-radius:10px; cursor:pointer; transition:opacity .2s; box-shadow:0 2px 8px rgba(184,147,74,.3); }
+.finish-btn { flex:1; padding:10px; border:none; background:linear-gradient(135deg,#B8934A,#D4A85C); color:#fff; font-family:inherit; font-size:14px; font-weight:700; border-radius:10px; cursor:pointer; transition:opacity .2s; box-shadow:0 2px 8px rgba(184,147,74,.3); letter-spacing:0.5px; }
 .finish-btn:hover { opacity:.85; }
 .edit-btn { padding:10px 14px; border:1px solid var(--border); background:transparent; color:var(--text2); font-family:'Noto Serif KR',serif; font-size:12px; border-radius:10px; cursor:pointer; white-space:nowrap; }
 .edit-btn:hover { border-color:var(--gold); color:var(--gold); }
@@ -807,7 +807,8 @@ function render(dates){
         inner.appendChild(sw); inner.appendChild(buildFoodNotes(date,meal));
         col.appendChild(inner); grid.appendChild(col);
       });
-      // ── finish-row (펼쳐진 상태에서만 보임) ──
+      card.appendChild(grid);
+      // ── finish-row ──
       const finishRow = document.createElement('div');
       finishRow.className = 'finish-row';
 
@@ -826,60 +827,19 @@ function render(dates){
       const finishBtn = document.createElement('button');
       finishBtn.className = 'finish-btn'; finishBtn.textContent = '✅ 기록 완료';
       finishBtn.onclick = async () => {
-        // 완료 버튼 체크 애니메이션
-        finishBtn.textContent = '✅';
-        finishBtn.style.cssText += 'animation:checkPop .4s cubic-bezier(.34,1.56,.64,1) both;';
-        await new Promise(r => setTimeout(r, 400));
         card.classList.add('done');
-        card.classList.add('collapsed');
         await fbPut('notes', `${dk}:done`, 'true');
-        setTimeout(() => {
-          const next = document.querySelector('.day-card:not(.collapsed)');
-          if(next) next.scrollIntoView({behavior:'smooth', block:'start'});
-        }, 300);
       };
 
       finishRow.appendChild(doneBadge);
       finishRow.appendChild(finishBtn);
 
-      // 접힌 상태 힌트 (헤더 아래 작은 버튼)
-      const collapseHint = document.createElement('div');
-      collapseHint.className = 'collapse-hint';
-      const hintBtn = document.createElement('button');
-      hintBtn.className = 'collapse-hint-btn';
-      hintBtn.textContent = '▼ 펼쳐서 기록하기';
-      hintBtn.onclick = () => {
-        card.classList.remove('collapsed');
-        // 펼칠 때 meal-grid 애니메이션 재실행
-        const mg = card.querySelector('.meal-grid');
-        if(mg){ mg.style.animation='none'; mg.offsetHeight; mg.style.animation=''; }
-      };
-      collapseHint.appendChild(hintBtn);
-
       card.appendChild(buildDayFooter(date));
       card.appendChild(finishRow);
-      card.appendChild(collapseHint);
 
-      // 헤더 클릭으로도 펼치기
-      header.style.cursor = 'pointer';
-      header.onclick = () => {
-        if(card.classList.contains('collapsed')){
-          card.classList.remove('collapsed');
-          const mg = card.querySelector('.meal-grid');
-          if(mg){ mg.style.animation='none'; mg.offsetHeight; mg.style.animation='slideDown .3s ease both'; }
-        }
-      };
-
-      // 상태 적용 — done일 때만 접기
+      // 상태 적용 — 접기 없음, 모두 펼쳐진 상태
       const isDone = notesCache[`${dk}:done`] === 'true';
-      if(isDone) {
-        card.classList.add('done');
-        card.classList.add('collapsed');
-      }
-      // 오늘(또는 오늘과 날짜만 같은 날) 강조
-      if(today) {
-        card.classList.add('today');
-      }
+      if(isDone) card.classList.add('done');
 
       sec.appendChild(card);
     });
