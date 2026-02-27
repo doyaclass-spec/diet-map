@@ -307,7 +307,12 @@ async function fbGetAll(col) {
 // ── Auth ──
 function signInWithGoogle() {
   const provider = new firebase.auth.GoogleAuthProvider();
-  auth.signInWithPopup(provider).catch(e => showToast('❌ 로그인 실패: ' + e.message));
+  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  if (isMobile) {
+    auth.signInWithRedirect(provider).catch(e => showToast('❌ 로그인 실패: ' + e.message));
+  } else {
+    auth.signInWithPopup(provider).catch(e => showToast('❌ 로그인 실패: ' + e.message));
+  }
 }
 function signOut() {
   if (confirm('로그아웃 하시겠어요?')) auth.signOut();
