@@ -83,10 +83,10 @@ canvas#weightChart{width:100%;height:200px;display:block;border-radius:10px;}
 /* MAIN */
 .loading-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:80px;gap:14px;}
 .day-card.done .meal-grid{pointer-events:none;}
-.day-card.done .empty-slot,.day-card.done .uploading-slot{display:none;}
-.day-card.done .food-note-row{display:none;}
+.day-card.done .empty-slot{opacity:0.4;pointer-events:none;}
+.day-card.done .food-note-input{pointer-events:none;background:transparent;border-color:transparent;}
 .day-card.done .meal-time-btn{pointer-events:none;}
-.day-card.done .add-note-btn,.day-card.done .food-add-btn{display:none;}
+.day-card.done .food-add-btn,.day-card.done .food-note-del,.day-card.done .food-limit-msg{display:none;}
 .day-card.done .meal-time-clear{display:none;}
 .day-card.done .day-footer{opacity:0.6;pointer-events:none;}
 /* 접힌 상태 - 헤더만 보임 */
