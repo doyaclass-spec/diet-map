@@ -82,13 +82,7 @@ canvas#weightChart{width:100%;height:200px;display:block;border-radius:10px;}
 
 /* MAIN */
 .loading-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:80px;gap:14px;}
-.day-card.done .meal-grid{pointer-events:none;}
-.day-card.done .empty-slot{opacity:0.4;pointer-events:none;}
-.day-card.done .food-note-input{pointer-events:none;background:transparent;border-color:transparent;}
-.day-card.done .meal-time-btn{pointer-events:none;}
-.day-card.done .food-add-btn,.day-card.done .food-note-del,.day-card.done .food-limit-msg{display:none;}
-.day-card.done .meal-time-clear{display:none;}
-.day-card.done .day-footer{opacity:0.6;pointer-events:none;}
+/* done = 접혀있을 뿐, 펼치면 완전 편집 가능 */
 /* 접힌 상태 - 헤더만 보임 */
 .day-card.collapsed .meal-grid,.day-card.collapsed .day-footer,.day-card.collapsed .finish-row{display:none;}
 .day-card.collapsed .day-header{margin-bottom:0;cursor:pointer;}
@@ -104,23 +98,7 @@ canvas#weightChart{width:100%;height:200px;display:block;border-radius:10px;}
 .day-card.done .finish-btn{display:none;}
 .day-card.done .done-badge{display:flex;align-items:center;gap:4px;}
 .day-card.done .finish-row{display:flex;}
-/* 과거기록 패널 */
-.history-panel{max-width:980px;margin:20px auto 0;padding:0 16px;}
-.history-box{background:var(--surface);border:1px solid var(--border);border-radius:18px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.04);}
-.history-header{padding:14px 20px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none;}
-.history-title{font-size:14px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:8px;}
-.history-toggle{font-size:12px;color:var(--text3);transition:transform .2s;}
-.history-toggle.open{transform:rotate(180deg);}
-.history-body{padding:0 20px 20px;display:none;}
-.history-body.open{display:block;}
-.history-table{width:100%;border-collapse:collapse;font-size:13px;}
-.history-table th{text-align:left;padding:8px 10px;color:var(--text3);font-size:11px;font-weight:600;border-bottom:1px solid var(--border);}
-.history-table td{padding:8px 10px;border-bottom:1px solid var(--border);color:var(--text);}
-.history-table tr:last-child td{border-bottom:none;}
-.history-table .h-date{color:var(--text2);font-weight:600;}
-.history-table .h-meals{display:flex;gap:4px;}
-.history-thumb{width:36px;height:36px;border-radius:6px;object-fit:cover;cursor:pointer;}
-.history-empty{color:var(--text3);font-size:12px;padding:20px 0;text-align:center;}
+
 .loading-spinner{width:32px;height:32px;border:3px solid var(--border);border-top-color:var(--gold);border-radius:50%;animation:spin .8s linear infinite;}
 .loading-text{font-size:14px;color:var(--text3);}
 main{max-width:980px;margin:0 auto;padding:24px 16px 80px;}
@@ -315,15 +293,7 @@ main{max-width:980px;margin:0 auto;padding:24px 16px 80px;}
   </div>
 </div>
 
-<div class="history-panel" id="historyPanel" style="display:none">
-  <div class="history-box">
-    <div class="history-header" onclick="toggleHistoryPanel()">
-      <div class="history-title"><span>📋</span><span>과거 기록</span></div>
-      <div class="history-toggle" id="historyToggle">▼</div>
-    </div>
-    <div class="history-body" id="historyBody"></div>
-  </div>
-</div>
+
 
 <div id="loadingScreen" class="loading-screen" style="display:none">
   <div class="loading-spinner"></div>
@@ -505,84 +475,7 @@ function updateDayStatus(dk,date) {
   const el=document.getElementById(`status-${dk}`); if(!el) return;
   el.textContent=filled===3?'✅ 3끼 완성!':filled>0?`${filled}/3 기록됨`:isToday(date)?'기록을 시작하세요':'기록 없음';
 }
-function toggleHistoryPanel(){
-  const body = document.getElementById('historyBody');
-  const toggle = document.getElementById('historyToggle');
-  const isOpen = body.classList.contains('open');
-  body.classList.toggle('open', !isOpen);
-  toggle.classList.toggle('open', !isOpen);
-}
 
-function updateHistoryPanel(){
-  const today = nowKST();
-  const allDates = getDates();
-  const dates = allDates.filter(d => {
-    if(isToday(d)) return false;
-    const dk = dateKey(d);
-    return MEALS.some(m => photoCache[dk+':'+m.key]) ||
-           typeof weightsCache[weightKey(d)] === 'number' ||
-           (exerciseCache['exercise:'+dk]&&exerciseCache['exercise:'+dk].type);
-  }).sort((a,b) => b-a);
-
-  const panel = document.getElementById('historyPanel');
-  const body = document.getElementById('historyBody');
-  if(dates.length === 0){ panel.style.display='none'; return; }
-  panel.style.display = '';
-
-  const DOW_KR=['일','월','화','수','목','금','토'];
-  body.innerHTML = '';
-  const table = document.createElement('table');
-  table.className = 'history-table';
-  table.innerHTML = '<thead><tr><th>날짜</th><th>식사</th><th>체중</th><th>운동</th></tr></thead>';
-  const tbody = document.createElement('tbody');
-
-  dates.forEach(d => {
-    const dk = dateKey(d);
-    const tr = document.createElement('tr');
-
-    const tdDate = document.createElement('td');
-    tdDate.className = 'h-date';
-    tdDate.textContent = (d.getMonth()+1)+'/'+d.getDate()+' ('+DOW_KR[d.getDay()]+')';
-
-    const tdMeals = document.createElement('td');
-    const mealsDiv = document.createElement('div'); mealsDiv.className='h-meals';
-    MEALS.forEach(m => {
-      const pk = dk+':'+m.key;
-      if(photoCache[pk]){
-        const img = document.createElement('img');
-        img.src = photoCache[pk]; img.className='history-thumb';
-        img.onclick = () => {
-          document.getElementById('lightboxImg').src=photoCache[pk];
-          document.getElementById('lightboxMeta').textContent=(d.getMonth()+1)+'월 '+d.getDate()+'일 '+m.label;
-          document.getElementById('lightbox').style.display='flex';
-        };
-        mealsDiv.appendChild(img);
-      } else {
-        const span = document.createElement('span');
-        span.textContent=m.emoji; span.style.cssText='font-size:18px;opacity:.25;';
-        mealsDiv.appendChild(span);
-      }
-    });
-    tdMeals.appendChild(mealsDiv);
-
-    const tdWeight = document.createElement('td');
-    const w = weightsCache[weightKey(d)];
-    tdWeight.textContent = typeof w==='number' ? w+'kg' : '—';
-
-    const tdExercise = document.createElement('td');
-    const eData = exerciseCache['exercise:'+dk] || {};
-    const etype = eData.type || '';
-    const edur = eData.duration || '';
-    tdExercise.textContent = etype ? etype+' '+edur+'분' : '—';
-    tdExercise.style.fontSize='12px';
-
-    tr.appendChild(tdDate); tr.appendChild(tdMeals); tr.appendChild(tdWeight); tr.appendChild(tdExercise);
-    tbody.appendChild(tr);
-  });
-
-  table.appendChild(tbody);
-  body.appendChild(table);
-}
 
 function toggleWeightPanel() {
   weightPanelOpen=!weightPanelOpen;
@@ -939,7 +832,7 @@ async function loadAndRender(){
   document.getElementById('loadingScreen').style.display='none';
   document.getElementById('mainContent').style.display='';
   document.getElementById('weightPanel').style.display='';
-  render(getDates()); updateStats(); updateStreak(); updateFastingTimer(); updateWeightMeta(); updateGoalBox(); updateHistoryPanel();
+  render(getDates()); updateStats(); updateStreak(); updateFastingTimer(); updateWeightMeta(); updateGoalBox(); 
   setTimeout(()=>drawWeightChart(),100);
   if(fastingInterval) clearInterval(fastingInterval);
   fastingInterval=setInterval(updateFastingTimer,60000);
