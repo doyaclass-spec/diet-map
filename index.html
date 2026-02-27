@@ -317,6 +317,9 @@ function signInWithGoogle() {
 function signOut() {
   if (confirm('로그아웃 하시겠어요?')) auth.signOut();
 }
+// redirect 처리 중인지 추적
+let redirectHandled = false;
+
 async function handleUser(user) {
   if (user) {
     currentUser = user;
@@ -325,7 +328,8 @@ async function handleUser(user) {
     document.getElementById('userAvatar').src = user.photoURL || '';
     document.getElementById('userName').textContent = user.displayName || user.email;
     if (!document.getElementById('mainContent').children.length) await loadAndRender();
-  } else {
+  } else if (redirectHandled) {
+    // redirect 처리 완료 후에만 로그인 화면 표시
     currentUser = null;
     document.getElementById('loginOverlay').classList.remove('hidden');
     document.getElementById('userBtn').style.display = 'none';
@@ -335,12 +339,31 @@ async function handleUser(user) {
   }
 }
 
+// 모바일: 먼저 로딩 화면 보여주고 redirect 결과 확인
+const isMobileUA = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+if (isMobileUA) {
+  document.getElementById('loginOverlay').classList.add('hidden');
+  document.getElementById('loadingScreen').style.display = '';
+}
+
 auth.getRedirectResult().then(async result => {
-  if (result && result.user) await handleUser(result.user);
-}).catch(e => console.error('redirect 오류:', e));
+  redirectHandled = true;
+  if (result && result.user) {
+    await handleUser(result.user);
+  } else {
+    // redirect 결과 없으면 로그인 화면
+    document.getElementById('loginOverlay').classList.remove('hidden');
+    document.getElementById('loadingScreen').style.display = 'none';
+  }
+}).catch(e => {
+  redirectHandled = true;
+  console.error('redirect 오류:', e);
+  document.getElementById('loginOverlay').classList.remove('hidden');
+  document.getElementById('loadingScreen').style.display = 'none';
+});
 
 auth.onAuthStateChanged(async user => {
-  await handleUser(user);
+  if (redirectHandled) await handleUser(user);
 });
 
 // ── 상수 & 전역 ──
