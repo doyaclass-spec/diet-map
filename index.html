@@ -317,53 +317,62 @@ function signInWithGoogle() {
 function signOut() {
   if (confirm('로그아웃 하시겠어요?')) auth.signOut();
 }
-// redirect 처리 중인지 추적
-let redirectHandled = false;
+// 항상 로딩 화면 먼저 (로그인창 숨김)
+document.getElementById('loginOverlay').classList.add('hidden');
+document.getElementById('loadingScreen').style.display = '';
 
-async function handleUser(user) {
-  if (user) {
-    currentUser = user;
-    document.getElementById('loginOverlay').classList.add('hidden');
-    document.getElementById('userBtn').style.display = '';
-    document.getElementById('userAvatar').src = user.photoURL || '';
-    document.getElementById('userName').textContent = user.displayName || user.email;
-    if (!document.getElementById('mainContent').children.length) await loadAndRender();
-  } else if (redirectHandled) {
-    // redirect 처리 완료 후에만 로그인 화면 표시
-    currentUser = null;
-    document.getElementById('loginOverlay').classList.remove('hidden');
-    document.getElementById('userBtn').style.display = 'none';
-    document.getElementById('mainContent').style.display = 'none';
-    document.getElementById('weightPanel').style.display = 'none';
-    document.getElementById('loadingScreen').style.display = 'none';
-  }
+function showLoginScreen() {
+  document.getElementById('loadingScreen').style.display = 'none';
+  document.getElementById('loginOverlay').classList.remove('hidden');
+  document.getElementById('userBtn').style.display = 'none';
+  document.getElementById('mainContent').style.display = 'none';
+  document.getElementById('weightPanel').style.display = 'none';
 }
 
-// 모바일: 먼저 로딩 화면 보여주고 redirect 결과 확인
-const isMobileUA = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-if (isMobileUA) {
+async function showMainScreen(user) {
+  currentUser = user;
   document.getElementById('loginOverlay').classList.add('hidden');
-  document.getElementById('loadingScreen').style.display = '';
+  document.getElementById('userBtn').style.display = '';
+  document.getElementById('userAvatar').src = user.photoURL || '';
+  document.getElementById('userName').textContent = user.displayName || user.email;
+  document.getElementById('loadingScreen').style.display = 'none';
+  if (!document.getElementById('mainContent').children.length) await loadAndRender();
 }
+
+// getRedirectResult로 모바일 redirect 결과 먼저 처리
+// onAuthStateChanged보다 먼저 실행되므로 null 깜빡임 방지
+let authInitialized = false;
 
 auth.getRedirectResult().then(async result => {
-  redirectHandled = true;
   if (result && result.user) {
-    await handleUser(result.user);
+    // redirect 로그인 성공
+    authInitialized = true;
+    await showMainScreen(result.user);
   } else {
-    // redirect 결과 없으면 로그인 화면
-    document.getElementById('loginOverlay').classList.remove('hidden');
-    document.getElementById('loadingScreen').style.display = 'none';
+    // redirect 아님 → onAuthStateChanged에게 위임
+    authInitialized = true;
   }
 }).catch(e => {
-  redirectHandled = true;
   console.error('redirect 오류:', e);
-  document.getElementById('loginOverlay').classList.remove('hidden');
-  document.getElementById('loadingScreen').style.display = 'none';
+  authInitialized = true;
 });
 
 auth.onAuthStateChanged(async user => {
-  if (redirectHandled) await handleUser(user);
+  // getRedirectResult 완료 후에만 처리
+  const waitForInit = () => new Promise(resolve => {
+    if (authInitialized) return resolve();
+    const t = setInterval(() => { if (authInitialized) { clearInterval(t); resolve(); } }, 50);
+  });
+  await waitForInit();
+
+  // 이미 메인 화면이면 스킵
+  if (document.getElementById('mainContent').children.length > 0) return;
+
+  if (user) {
+    await showMainScreen(user);
+  } else {
+    showLoginScreen();
+  }
 });
 
 // ── 상수 & 전역 ──
