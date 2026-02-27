@@ -19,14 +19,16 @@
 body{font-family:'Noto Serif KR',Georgia,serif;background:var(--bg);color:var(--text);min-height:100vh;}
 
 /* LOGIN */
-.login-overlay{position:fixed;inset:0;z-index:99999;background:linear-gradient(135deg,#1C1410,#2C1F10,#1A1208);display:flex;align-items:center;justify-content:center;flex-direction:column;gap:24px;padding:40px;}
+.login-overlay{position:fixed;inset:0;z-index:99999;background:linear-gradient(160deg,#1A0F08 0%,#2C1A0A 50%,#1A0F08 100%);display:flex;align-items:center;justify-content:center;flex-direction:column;gap:24px;padding:40px 32px;}
 .login-overlay.hidden{display:none;}
-.login-logo{font-family:'DM Serif Display',serif;font-size:36px;color:var(--gold-light);text-align:center;}
-.login-sub{font-size:13px;color:#8A7560;text-align:center;line-height:1.6;}
-.login-btn{display:flex;align-items:center;gap:12px;background:#fff;color:#333;padding:14px 28px;border:none;border-radius:50px;font-size:15px;font-family:'Noto Serif KR',serif;font-weight:600;cursor:pointer;box-shadow:0 4px 20px rgba(0,0,0,0.3);transition:transform .15s,box-shadow .15s;}
-.login-btn:hover{transform:translateY(-2px);box-shadow:0 8px 28px rgba(0,0,0,0.4);}
+.login-icon{font-size:52px;filter:drop-shadow(0 4px 12px rgba(184,147,74,0.5));}
+.login-logo{font-family:'DM Serif Display',serif;font-size:40px;color:#F5EDD6;text-align:center;letter-spacing:1px;text-shadow:0 2px 20px rgba(184,147,74,0.3);}
+.login-year{font-size:13px;color:#B8934A;letter-spacing:6px;text-transform:uppercase;}
+.login-divider{width:60px;height:1px;background:linear-gradient(90deg,transparent,#B8934A,transparent);}
+.login-btn{width:100%;max-width:300px;display:flex;align-items:center;justify-content:center;gap:12px;background:#fff;color:#1C1410;padding:16px 28px;border:none;border-radius:14px;font-size:16px;font-family:'Noto Serif KR',serif;font-weight:700;cursor:pointer;box-shadow:0 8px 32px rgba(0,0,0,0.4);transition:transform .15s,box-shadow .15s;}
+.login-btn:hover{transform:translateY(-2px);box-shadow:0 12px 40px rgba(0,0,0,0.5);}
+.login-btn:active{transform:translateY(0);}
 .login-btn img{width:22px;height:22px;}
-.login-note{font-size:11px;color:#5C4A30;text-align:center;max-width:280px;line-height:1.6;}
 
 /* HEADER */
 header{background:#1C1410;color:var(--gold-light);padding:20px 24px;position:sticky;top:0;z-index:100;box-shadow:0 4px 24px rgba(0,0,0,.35);}
@@ -184,13 +186,14 @@ main{max-width:980px;margin:0 auto;padding:24px 16px 80px;}
 <body>
 
 <div class="login-overlay" id="loginOverlay">
-  <div class="login-logo">🍽️ 나의 식사 기록</div>
-  <div class="login-sub">2025년 다이어트 목표를 향해<br>매일 식사를 기록하세요</div>
+  <div class="login-icon">🍽️</div>
+  <div class="login-logo">나의 식사 기록</div>
+  <div class="login-year">2025 Diet Journal</div>
+  <div class="login-divider"></div>
   <button class="login-btn" onclick="signInWithGoogle()">
     <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google">
-    Google로 로그인
+    Google 계정으로 로그인
   </button>
-  <div class="login-note">모바일, 사무실, 집 어디서든<br>같은 기록을 볼 수 있어요 ☁️</div>
 </div>
 
 <header>
@@ -307,62 +310,51 @@ async function fbGetAll(col) {
 // ── Auth ──
 function signInWithGoogle() {
   const provider = new firebase.auth.GoogleAuthProvider();
-  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-  if (isMobile) {
-    auth.signInWithRedirect(provider).catch(e => showToast('❌ 로그인 실패: ' + e.message));
-  } else {
-    auth.signInWithPopup(provider).catch(e => showToast('❌ 로그인 실패: ' + e.message));
-  }
+  // redirect 방식으로 통일 (모바일/PC 모두)
+  auth.signInWithRedirect(provider).catch(e => {
+    console.error(e);
+    showToast('❌ 로그인 실패: ' + e.message);
+  });
 }
 function signOut() {
   if (confirm('로그아웃 하시겠어요?')) auth.signOut();
 }
-// 로딩 화면 먼저 (로그인창 숨김)
+// 로딩 화면 먼저
 document.getElementById('loginOverlay').classList.add('hidden');
 document.getElementById('loadingScreen').style.display = '';
 
-function showLoginScreen() {
-  document.getElementById('loadingScreen').style.display = 'none';
-  document.getElementById('loginOverlay').classList.remove('hidden');
-  document.getElementById('userBtn').style.display = 'none';
-  document.getElementById('mainContent').style.display = 'none';
-  document.getElementById('weightPanel').style.display = 'none';
-}
-
-async function showMainScreen(user) {
-  currentUser = user;
-  document.getElementById('loginOverlay').classList.add('hidden');
-  document.getElementById('userBtn').style.display = '';
-  document.getElementById('userAvatar').src = user.photoURL || '';
-  document.getElementById('userName').textContent = user.displayName || user.email;
-  document.getElementById('loadingScreen').style.display = 'none';
-  await loadAndRender();
-}
-
-// 순서대로: redirect 결과 확인 → auth 상태 확인 → 화면 결정
-(async function initAuth() {
+async function startApp() {
+  // 1) redirect 결과 먼저 처리
   try {
-    // 1) redirect 로그인 결과 확인
     const result = await auth.getRedirectResult();
     if (result && result.user) {
-      await showMainScreen(result.user);
-      return;
+      // redirect 로그인 성공 → 바로 진행
     }
-  } catch(e) {
-    console.error('redirect 오류:', e);
-  }
+  } catch(e) { console.error('redirect error:', e); }
 
-  // 2) 기존 로그인 세션 확인 (한 번만)
+  // 2) 현재 로그인 상태 한 번만 확인
   const user = await new Promise(resolve => {
     const unsub = auth.onAuthStateChanged(u => { unsub(); resolve(u); });
   });
 
   if (user) {
-    await showMainScreen(user);
+    currentUser = user;
+    document.getElementById('loginOverlay').classList.add('hidden');
+    document.getElementById('userBtn').style.display = '';
+    document.getElementById('userAvatar').src = user.photoURL || '';
+    document.getElementById('userName').textContent = user.displayName || user.email;
+    document.getElementById('loadingScreen').style.display = 'none';
+    await loadAndRender();
   } else {
-    showLoginScreen();
+    document.getElementById('loadingScreen').style.display = 'none';
+    document.getElementById('loginOverlay').classList.remove('hidden');
+    document.getElementById('userBtn').style.display = 'none';
+    document.getElementById('mainContent').style.display = 'none';
+    document.getElementById('weightPanel').style.display = 'none';
   }
-})();
+}
+
+startApp();
 
 // ── 상수 & 전역 ──
 const GOAL_WEIGHT = 75;
