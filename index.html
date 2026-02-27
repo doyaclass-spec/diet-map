@@ -310,14 +310,12 @@ async function fbGetAll(col) {
 // ── Auth ──
 function signInWithGoogle() {
   const provider = new firebase.auth.GoogleAuthProvider();
-  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-  if (isMobile) {
-    auth.signInWithRedirect(provider);
-  } else {
-    auth.signInWithPopup(provider).then(() => startApp()).catch(e => {
-      showToast('❌ 로그인 실패: ' + e.message);
+  auth.signInWithPopup(provider)
+    .then(() => startApp())
+    .catch(e => {
+      console.error(e);
+      showToast('❌ 로그인 실패. 크롬 브라우저에서 시도해주세요.');
     });
-  }
 }
 function signOut() {
   if (confirm('로그아웃 하시겠어요?')) auth.signOut();
@@ -345,20 +343,9 @@ function showLogin() {
 }
 
 async function startApp() {
-  // 모바일 redirect 결과 먼저 확인
-  try {
-    const result = await auth.getRedirectResult();
-    if (result && result.user) {
-      await showMain(result.user);
-      return;
-    }
-  } catch(e) { console.error('redirect error:', e); }
-
-  // 현재 세션 확인
   const user = await new Promise(resolve => {
     const unsub = auth.onAuthStateChanged(u => { unsub(); resolve(u); });
   });
-
   if (user) {
     await showMain(user);
   } else {
