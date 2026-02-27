@@ -67,16 +67,16 @@ header{background:#1C1410;color:var(--gold-light);padding:20px 24px;position:sti
 canvas#weightChart{width:100%;height:200px;display:block;border-radius:10px;}
 .goal-box{display:flex;align-items:center;background:linear-gradient(135deg,#1A2F1A,#1E3820);border:1px solid #2A5030;border-radius:12px;padding:12px 16px;margin-bottom:14px;gap:14px;flex-wrap:wrap;}
 .goal-item{display:flex;flex-direction:column;gap:2px;}
-.goal-item-label{font-size:10px;color:#6A9A6A;letter-spacing:.5px;}
-.goal-item-value{font-family:'DM Serif Display',serif;font-size:20px;color:#fff;line-height:1;}
-.goal-item-unit{font-size:11px;color:#8ABF8A;margin-left:2px;}
-.goal-divider{width:1px;height:36px;background:#2A5030;flex-shrink:0;}
-.goal-remaining{display:flex;flex-direction:column;gap:3px;flex:1;min-width:120px;}
-.goal-remaining-label{font-size:10px;color:#6A9A6A;}
-.goal-remaining-bar-wrap{height:6px;background:#0F200F;border-radius:3px;overflow:hidden;width:100%;}
-.goal-remaining-bar{height:100%;border-radius:3px;transition:width .6s ease;background:linear-gradient(90deg,#2ECC71,#27AE60);}
-.goal-remaining-value{font-size:13px;font-weight:700;color:#5DDB8A;}
-.goal-reached{font-size:13px;font-weight:700;color:#FFD700;}
+.goal-item-label{font-size:12px;color:#90C490;letter-spacing:.5px;font-weight:600;}
+.goal-item-value{font-family:'DM Serif Display',serif;font-size:24px;color:#fff;line-height:1;}
+.goal-item-unit{font-size:13px;color:#A8D4A8;margin-left:2px;}
+.goal-divider{width:1px;height:40px;background:#3A6040;flex-shrink:0;}
+.goal-remaining{display:flex;flex-direction:column;gap:4px;flex:1;min-width:120px;}
+.goal-remaining-label{font-size:12px;color:#90C490;font-weight:600;}
+.goal-remaining-bar-wrap{height:8px;background:#1A3020;border-radius:4px;overflow:hidden;width:100%;}
+.goal-remaining-bar{height:100%;border-radius:4px;transition:width .6s ease;background:linear-gradient(90deg,#2ECC71,#27AE60);}
+.goal-remaining-value{font-size:15px;font-weight:700;color:#6EE88A;}
+.goal-reached{font-size:15px;font-weight:700;color:#FFD700;}
 
 /* MAIN */
 .loading-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:80px;gap:14px;}
@@ -93,15 +93,15 @@ main{max-width:980px;margin:0 auto;padding:24px 16px 80px;}
 .day-header{display:flex;align-items:center;gap:12px;margin-bottom:12px;}
 .day-badge{width:38px;height:38px;background:var(--surface2);border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
 .day-card.today .day-badge{background:var(--gold);}
-.day-dow{font-size:13px;font-weight:700;color:var(--text2);}
+.day-dow{font-size:15px;font-weight:700;color:var(--text2);}
 .day-card.today .day-dow{color:#fff;}
 .day-info{flex:1;}
-.day-info-title{font-size:15px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
-.today-badge{font-size:10px;background:var(--gold);color:#fff;padding:2px 8px;border-radius:20px;}
-.day-status{font-size:11px;color:var(--gold);margin-top:2px;}
+.day-info-title{font-size:17px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+.today-badge{font-size:11px;background:var(--gold);color:#fff;padding:2px 8px;border-radius:20px;}
+.day-status{font-size:12px;color:var(--gold);margin-top:2px;}
 .meal-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;}
 .meal-col-inner{display:flex;flex-direction:column;}
-.meal-label{font-size:11px;color:var(--text3);margin-bottom:4px;display:flex;align-items:center;gap:4px;}
+.meal-label{font-size:12px;color:var(--text2);margin-bottom:4px;display:flex;align-items:center;gap:4px;font-weight:600;}
 
 /* TIME PICKER */
 .meal-time-row{display:flex;align-items:center;gap:4px;margin-bottom:5px;position:relative;}
@@ -143,26 +143,26 @@ main{max-width:980px;margin:0 auto;padding:24px 16px 80px;}
 /* FOOD NOTES */
 .food-notes{margin-top:6px;display:flex;flex-direction:column;gap:3px;}
 .food-note-row{display:flex;align-items:center;gap:3px;}
-.food-note-input{flex:1;padding:4px 7px;font-size:10px;font-family:'Noto Serif KR',serif;color:var(--text);background:var(--surface2);border:1px solid var(--border);border-radius:6px;outline:none;transition:border-color .2s;min-width:0;}
+.food-note-input{flex:1;padding:5px 8px;font-size:12px;font-family:'Noto Serif KR',serif;color:var(--text);background:var(--surface2);border:1px solid var(--border);border-radius:6px;outline:none;transition:border-color .2s;min-width:0;}
 .food-note-input:focus{border-color:var(--gold);background:#FFFDF7;}
-.food-note-input::placeholder{color:#C4B494;font-size:9px;}
-.food-note-del{flex-shrink:0;width:16px;height:16px;border:none;background:none;color:#D0C0A0;font-size:14px;cursor:pointer;border-radius:50%;display:flex;align-items:center;justify-content:center;transition:color .15s,background .15s;padding:0;line-height:1;}
+.food-note-input::placeholder{color:#B0A080;font-size:11px;}
+.food-note-del{flex-shrink:0;width:18px;height:18px;border:none;background:none;color:#C0A880;font-size:16px;cursor:pointer;border-radius:50%;display:flex;align-items:center;justify-content:center;transition:color .15s,background .15s;padding:0;line-height:1;}
 .food-note-del:hover{color:#e05050;background:#FFF0F0;}
-.food-add-btn{margin-top:2px;width:100%;padding:4px 0;font-size:9px;font-family:'Noto Serif KR',serif;color:var(--text3);background:none;border:1px dashed var(--border);border-radius:6px;cursor:pointer;transition:all .15s;}
+.food-add-btn{margin-top:3px;width:100%;padding:5px 0;font-size:11px;font-family:'Noto Serif KR',serif;color:var(--text2);background:none;border:1px dashed var(--border);border-radius:6px;cursor:pointer;transition:all .15s;}
 .food-add-btn:hover{border-color:var(--gold);color:var(--gold);background:var(--gold-light);}
-.food-limit-msg{font-size:9px;color:#C0B090;text-align:center;padding:3px 0;}
+.food-limit-msg{font-size:11px;color:#A09070;text-align:center;padding:3px 0;}
 
 /* DAY FOOTER */
 .day-footer{margin-top:14px;padding-top:12px;border-top:1px solid var(--border);display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;}
 .footer-block{display:flex;flex-direction:column;gap:4px;}
-.footer-label{font-size:10px;color:var(--text3);font-weight:600;letter-spacing:.5px;display:flex;align-items:center;gap:4px;}
+.footer-label{font-size:12px;color:var(--text2);font-weight:700;letter-spacing:.3px;display:flex;align-items:center;gap:4px;}
 .footer-input-row{display:flex;align-items:center;gap:6px;}
-.footer-input{padding:5px 9px;font-size:12px;font-family:'Noto Serif KR',serif;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--text);outline:none;transition:border-color .2s;}
+.footer-input{padding:6px 10px;font-size:13px;font-family:'Noto Serif KR',serif;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--text);outline:none;transition:border-color .2s;}
 .footer-input:focus{border-color:var(--gold);background:#FFFDF7;}
 .footer-input.w-weight{width:80px;}
 .footer-input.w-exercise-type{width:130px;}
 .footer-input.w-exercise-dur{width:60px;}
-.footer-unit{font-size:11px;color:var(--text3);}
+.footer-unit{font-size:12px;color:var(--text2);font-weight:600;}
 
 /* LIGHTBOX */
 .lightbox{display:none;position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:9999;align-items:center;justify-content:center;flex-direction:column;padding:24px;cursor:zoom-out;}
@@ -317,6 +317,13 @@ function signInWithGoogle() {
 function signOut() {
   if (confirm('로그아웃 하시겠어요?')) auth.signOut();
 }
+// 모바일 redirect 로그인 후 결과 처리
+auth.getRedirectResult().then(result => {
+  // redirect 결과는 onAuthStateChanged가 자동으로 처리하므로 별도 처리 불필요
+}).catch(e => {
+  if (e.code !== 'auth/no-current-user') console.error('redirect 오류:', e);
+});
+
 auth.onAuthStateChanged(async user => {
   if (user) {
     currentUser = user;
@@ -619,6 +626,11 @@ function buildDayFooter(date){
   eType.addEventListener('blur',saveEx); eDur.addEventListener('blur',saveEx);
   eRow.appendChild(eType); eRow.appendChild(eDur); eRow.appendChild(eUnit); eBlock.appendChild(eRow); footer.appendChild(eBlock);
   return footer;
+}
+
+function triggerUpload(date, meal) {
+  currentUpload = { date, meal };
+  document.getElementById('fileInput').click();
 }
 
 // ── 이미지 압축 (canvas) ──
