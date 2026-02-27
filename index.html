@@ -833,8 +833,15 @@ function buildEditCard(date, dk, today) {
   const headerActions = document.createElement('div'); headerActions.className='header-actions';
   const finishBtnSm = document.createElement('button'); finishBtnSm.className='finish-btn-sm'; finishBtnSm.textContent='✅ 기록 완료';
   finishBtnSm.onclick = async () => {
-    await fbPut('notes', `${dk}:done`, 'true');
+    finishBtnSm.textContent = '저장 중...';
+    finishBtnSm.disabled = true;
+    notesCache[`${dk}:done`] = 'true';
+    try {
+      await fbPut('notes', `${dk}:done`, 'true');
+    } catch(e) { console.error(e); }
     render(getDates());
+    const completedSec = document.querySelector('.completed-section');
+    if(completedSec) setTimeout(()=>completedSec.scrollIntoView({behavior:'smooth',block:'start'}),200);
   };
   headerActions.appendChild(finishBtnSm);
   header.innerHTML = `<div class="day-badge"><div class="day-dow">${DOW[date.getDay()]}</div></div><div class="day-info"><div class="day-info-title">${date.getDate()}일${today?'<span class="today-badge">오늘</span>':''}</div><div class="day-status" id="status-${dk}">${statusText}</div></div>`;
@@ -899,7 +906,17 @@ function buildDoneCard(date, dk) {
   // 오른쪽: 수정 버튼
   const right = document.createElement('div'); right.className='done-card-right';
   const editBtn = document.createElement('button'); editBtn.className='done-edit-btn'; editBtn.textContent='✏️ 수정';
-  editBtn.onclick = async () => { await fbPut('notes',`${dk}:done`,'false'); render(getDates()); };
+  editBtn.onclick = async () => {
+    editBtn.textContent = '...';
+    editBtn.disabled = true;
+    delete notesCache[`${dk}:done`];
+    try {
+      await userCol('notes').doc(encId(`${dk}:done`)).delete();
+    } catch(e) { console.error(e); }
+    render(getDates());
+    const todayCard = document.querySelector('.day-card.today');
+    if(todayCard) setTimeout(()=>todayCard.scrollIntoView({behavior:'smooth',block:'start'}),200);
+  };
   right.appendChild(editBtn);
 
   card.appendChild(left); card.appendChild(mealsGrid); card.appendChild(right);
