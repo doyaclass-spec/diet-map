@@ -94,12 +94,52 @@ canvas#weightChart{width:100%;height:200px;display:block;border-radius:10px;}
 .day-card.done .day-footer input { pointer-events:none; }
 /* 헤더 오른쪽 버튼 영역 */
 .header-actions { margin-left:auto; display:flex; gap:6px; align-items:center; }
-.finish-btn-sm { padding:5px 14px; border:none; background:linear-gradient(135deg,#B8934A,#D4A85C); color:#fff; font-family:inherit; font-size:12px; font-weight:700; border-radius:8px; cursor:pointer; white-space:nowrap; box-shadow:0 2px 6px rgba(184,147,74,.3); }
+.finish-btn-sm { padding:6px 14px; border:none; background:linear-gradient(135deg,#B8934A,#D4A85C); color:#fff; font-family:inherit; font-size:12px; font-weight:700; border-radius:8px; cursor:pointer; white-space:nowrap; box-shadow:0 2px 6px rgba(184,147,74,.3); transition:opacity .15s; }
 .finish-btn-sm:hover { opacity:.85; }
-.edit-btn-sm { padding:5px 12px; border:1px solid var(--border); background:transparent; color:var(--text2); font-family:inherit; font-size:12px; border-radius:8px; cursor:pointer; white-space:nowrap; display:none; }
+.edit-btn-sm { padding:6px 12px; border:1px solid var(--border); background:transparent; color:var(--text2); font-family:inherit; font-size:12px; border-radius:8px; cursor:pointer; white-space:nowrap; display:none; transition:border-color .15s; }
 .edit-btn-sm:hover { border-color:var(--gold); color:var(--gold); }
+/* done 상태 - 빈 항목 숨기기 */
+.day-card.done .empty-slot { display:none !important; }
+.day-card.done .meal-time-btn:not(.has-time) { display:none !important; }
+.day-card.done .meal-time-clear { display:none !important; }
+.day-card.done .food-add-btn { display:none !important; }
+.day-card.done .food-note-del { display:none !important; }
+.day-card.done .food-note-input { pointer-events:none; border-color:transparent !important; background:transparent !important; padding-left:0; }
+.day-card.done .food-note-input::placeholder { color:transparent; }
+.day-card.done .meal-time-btn { pointer-events:none; }
+.day-card.done .day-footer input { pointer-events:none; }
 .day-card.done .finish-btn-sm { display:none; }
 .day-card.done .edit-btn-sm { display:inline-block; }
+/* 완료된 기록 섹션 */
+.completed-section { margin-top:32px; }
+.completed-header { display:flex; align-items:center; gap:12px; margin-bottom:12px; }
+.completed-title { font-family:'DM Serif Display',serif; font-size:18px; color:var(--text); font-weight:400; white-space:nowrap; display:flex; align-items:center; gap:8px; }
+.completed-count { font-size:11px; background:var(--gold); color:#fff; padding:2px 8px; border-radius:20px; font-family:'Noto Serif KR',serif; }
+.completed-line { flex:1; height:1px; background:var(--border); }
+/* 완료 카드 */
+.done-card { background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:14px 16px; box-shadow:0 1px 4px rgba(0,0,0,.04); display:flex; gap:14px; align-items:flex-start; margin-bottom:10px; transition:box-shadow .2s; }
+.done-card:hover { box-shadow:0 4px 16px rgba(0,0,0,.08); }
+.done-card-left { display:flex; flex-direction:column; gap:2px; min-width:64px; }
+.done-date-num { font-size:18px; font-weight:700; color:var(--text); line-height:1.2; }
+.done-date-dow { font-size:11px; color:var(--text3); }
+.done-meta { margin-top:8px; display:flex; flex-direction:column; gap:3px; }
+.done-meta-item { font-size:11px; color:var(--text2); }
+.done-meals-grid { flex:1; display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; }
+.done-meal-col { display:flex; flex-direction:column; gap:4px; }
+.done-meal-label { font-size:10px; color:var(--text3); font-weight:600; }
+.done-thumb { width:100%; aspect-ratio:1; border-radius:8px; object-fit:cover; cursor:pointer; }
+.done-thumb-empty { width:100%; aspect-ratio:1; border-radius:8px; background:var(--surface2); display:flex; align-items:center; justify-content:center; font-size:18px; opacity:.35; }
+.done-foods { font-size:11px; color:var(--text2); line-height:1.6; }
+.done-no-food { font-size:11px; color:#C0A880; font-style:italic; }
+.done-card-right { display:flex; flex-direction:column; align-items:flex-end; gap:8px; flex-shrink:0; }
+.done-edit-btn { padding:5px 10px; border:1px solid var(--border); background:transparent; color:var(--text3); font-family:inherit; font-size:11px; border-radius:6px; cursor:pointer; white-space:nowrap; }
+.done-edit-btn:hover { border-color:var(--gold); color:var(--gold); }
+@media(max-width:640px){
+  .done-card { flex-direction:column; }
+  .done-meals-grid { grid-template-columns:1fr 1fr 1fr; }
+  .done-card-left { flex-direction:row; align-items:center; gap:12px; }
+  .done-meta { flex-direction:row; gap:10px; margin-top:0; }
+}
 
 /* ── 애니메이션 키프레임 ── */
 @keyframes fadeInUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
@@ -782,54 +822,138 @@ document.getElementById('fileInput').addEventListener('change', async function(e
   this.value='';
 });
 
+function buildEditCard(date, dk, today) {
+  const filled = MEALS.filter(m=>photoCache[`${dk}:${m.key}`]).length;
+  const statusText = filled===3?'✅ 3끼 완성!':filled>0?`${filled}/3 기록됨`:today?'기록을 시작하세요':'기록 없음';
+  const card = document.createElement('div');
+  card.className = `day-card${today?' today':''}`;
+
+  // 헤더
+  const header = document.createElement('div'); header.className='day-header';
+  const headerActions = document.createElement('div'); headerActions.className='header-actions';
+  const finishBtnSm = document.createElement('button'); finishBtnSm.className='finish-btn-sm'; finishBtnSm.textContent='✅ 기록 완료';
+  finishBtnSm.onclick = async () => {
+    await fbPut('notes', `${dk}:done`, 'true');
+    render(getDates());
+  };
+  headerActions.appendChild(finishBtnSm);
+  header.innerHTML = `<div class="day-badge"><div class="day-dow">${DOW[date.getDay()]}</div></div><div class="day-info"><div class="day-info-title">${date.getDate()}일${today?'<span class="today-badge">오늘</span>':''}</div><div class="day-status" id="status-${dk}">${statusText}</div></div>`;
+  header.appendChild(headerActions);
+  card.appendChild(header);
+
+  // 식사 그리드
+  const grid = document.createElement('div'); grid.className='meal-grid'; grid.id=`grid-${dk}`;
+  MEALS.forEach(meal=>{
+    const col=document.createElement('div'), inner=document.createElement('div'); inner.className='meal-col-inner';
+    const lbl=document.createElement('div'); lbl.className='meal-label'; lbl.innerHTML=`<span>${meal.emoji}</span><span style="color:${meal.color};font-size:8px">●</span><span style="color:${meal.color};font-weight:700">${meal.label}</span>`;
+    inner.appendChild(lbl); inner.appendChild(buildMealTimeRow(date,meal));
+    const pk=`${dk}:${meal.key}`, sw=document.createElement('div'); sw.id=`slot-${pk}`;
+    sw.appendChild(photoCache[pk]?createPhotoSlot(photoCache[pk],date,meal):createEmptySlot(date,meal));
+    inner.appendChild(sw); inner.appendChild(buildFoodNotes(date,meal));
+    col.appendChild(inner); grid.appendChild(col);
+  });
+  card.appendChild(grid);
+  card.appendChild(buildDayFooter(date));
+  return card;
+}
+
+function buildDoneCard(date, dk) {
+  const DOW_KR = ['일','월','화','수','목','금','토'];
+  const card = document.createElement('div'); card.className='done-card';
+
+  // 왼쪽: 날짜 + 메타
+  const left = document.createElement('div'); left.className='done-card-left';
+  const dateNum = document.createElement('div'); dateNum.className='done-date-num';
+  dateNum.textContent = `${date.getMonth()+1}/${date.getDate()}`;
+  const dateDow = document.createElement('div'); dateDow.className='done-date-dow';
+  dateDow.textContent = DOW_KR[date.getDay()]+'요일';
+  const meta = document.createElement('div'); meta.className='done-meta';
+  const w = weightsCache[weightKey(date)];
+  if(typeof w==='number') { const wi=document.createElement('div'); wi.className='done-meta-item'; wi.textContent=`⚖️ ${w}kg`; meta.appendChild(wi); }
+  const eData = exerciseCache[`exercise:${dk}`]||exerciseCache[exKey(date)]||{};
+  if(eData.type) { const ei=document.createElement('div'); ei.className='done-meta-item'; ei.textContent=`🏃 ${eData.type} ${eData.duration||''}분`; meta.appendChild(ei); }
+  left.appendChild(dateNum); left.appendChild(dateDow); left.appendChild(meta);
+
+  // 가운데: 식사 3컬럼
+  const mealsGrid = document.createElement('div'); mealsGrid.className='done-meals-grid';
+  MEALS.forEach(meal=>{
+    const col = document.createElement('div'); col.className='done-meal-col';
+    const lbl = document.createElement('div'); lbl.className='done-meal-label'; lbl.textContent=`${meal.emoji} ${meal.label}`;
+    col.appendChild(lbl);
+    const pk=`${dk}:${meal.key}`;
+    if(photoCache[pk]) {
+      const img=document.createElement('img'); img.className='done-thumb'; img.src=photoCache[pk];
+      img.onclick=()=>{ document.getElementById('lightboxImg').src=photoCache[pk]; document.getElementById('lightboxMeta').textContent=`${date.getMonth()+1}월 ${date.getDate()}일 ${meal.label}`; document.getElementById('lightbox').style.display='flex'; };
+      col.appendChild(img);
+    } else {
+      const empty=document.createElement('div'); empty.className='done-thumb-empty'; empty.textContent=meal.emoji;
+      col.appendChild(empty);
+    }
+    const nk=noteKey(date,meal.key);
+    const notes=(notesCache[nk]||[]).filter(n=>n&&n.trim());
+    if(notes.length) { const fd=document.createElement('div'); fd.className='done-foods'; fd.textContent=notes.join(', '); col.appendChild(fd); }
+    else { const fd=document.createElement('div'); fd.className='done-no-food'; fd.textContent='기록 없음'; col.appendChild(fd); }
+    mealsGrid.appendChild(col);
+  });
+
+  // 오른쪽: 수정 버튼
+  const right = document.createElement('div'); right.className='done-card-right';
+  const editBtn = document.createElement('button'); editBtn.className='done-edit-btn'; editBtn.textContent='✏️ 수정';
+  editBtn.onclick = async () => { await fbPut('notes',`${dk}:done`,'false'); render(getDates()); };
+  right.appendChild(editBtn);
+
+  card.appendChild(left); card.appendChild(mealsGrid); card.appendChild(right);
+  return card;
+}
+
 function render(dates){
   const main=document.getElementById('mainContent'); main.innerHTML='';
+
+  // 오늘 날짜 찾기
+  const todayDate = dates.find(d=>isToday(d));
+  const todayDk = todayDate ? dateKey(todayDate) : null;
+
+  // 미완료 날짜들 (오늘 포함) - 상단
+  const activeDates = dates.filter(d=>{
+    const dk=dateKey(d);
+    return notesCache[`${dk}:done`] !== 'true';
+  });
+
+  // 완료된 날짜들 - 하단
+  const doneDates = dates.filter(d=>{
+    const dk=dateKey(d);
+    return notesCache[`${dk}:done`] === 'true';
+  }).sort((a,b)=>b-a); // 최신순
+
+  // 미완료 섹션 (월별)
   const months={};
-  dates.forEach(d=>{ const mk=`${d.getFullYear()}-${d.getMonth()}`; if(!months[mk])months[mk]={label:`${d.getMonth()+1}월`,dates:[]}; months[mk].dates.push(d); });
+  activeDates.forEach(d=>{ const mk=`${d.getFullYear()}-${d.getMonth()}`; if(!months[mk])months[mk]={label:`${d.getMonth()+1}월`,dates:[]}; months[mk].dates.push(d); });
   Object.values(months).forEach(({label,dates:mDates})=>{
     const sec=document.createElement('section'); sec.className='month-section';
     sec.innerHTML=`<div class="month-header"><h2 class="month-title">${label}</h2><div class="month-line"></div></div>`;
     mDates.forEach(date=>{
-      const today=isToday(date),dk=dateKey(date);
-      const filled=MEALS.filter(m=>photoCache[`${dk}:${m.key}`]).length;
-      const statusText=filled===3?'✅ 3끼 완성!':filled>0?`${filled}/3 기록됨`:today?'기록을 시작하세요':'기록 없음';
-      const card=document.createElement('div'); card.className=`day-card${today?' today':''}`;
-      const header=document.createElement('div'); header.className='day-header';
-
-      // 헤더 오른쪽 버튼
-      const headerActions = document.createElement('div'); headerActions.className='header-actions';
-      const finishBtnSm = document.createElement('button'); finishBtnSm.className='finish-btn-sm'; finishBtnSm.textContent='✅ 기록 완료';
-      finishBtnSm.onclick = async () => { card.classList.add('done'); await fbPut('notes',`${dk}:done`,'true'); };
-      const editBtnSm = document.createElement('button'); editBtnSm.className='edit-btn-sm'; editBtnSm.textContent='✏️ 수정';
-      editBtnSm.onclick = async () => { card.classList.remove('done'); await fbPut('notes',`${dk}:done`,'false'); };
-      headerActions.appendChild(finishBtnSm); headerActions.appendChild(editBtnSm);
-
-      header.innerHTML=`<div class="day-badge"><div class="day-dow">${DOW[date.getDay()]}</div></div><div class="day-info"><div class="day-info-title">${date.getDate()}일${today?'<span class="today-badge">오늘</span>':''}</div><div class="day-status" id="status-${dk}">${statusText}</div></div>`;
-      header.appendChild(headerActions);
-      card.appendChild(header);
-      const grid=document.createElement('div'); grid.className='meal-grid'; grid.id=`grid-${dk}`;
-      MEALS.forEach(meal=>{
-        const col=document.createElement('div'), inner=document.createElement('div'); inner.className='meal-col-inner';
-        const lbl=document.createElement('div'); lbl.className='meal-label'; lbl.innerHTML=`<span>${meal.emoji}</span><span style="color:${meal.color};font-size:8px">●</span><span style="color:${meal.color};font-weight:700">${meal.label}</span>`;
-        inner.appendChild(lbl); inner.appendChild(buildMealTimeRow(date,meal));
-        const pk=`${dk}:${meal.key}`, sw=document.createElement('div'); sw.id=`slot-${pk}`;
-        sw.appendChild(photoCache[pk]?createPhotoSlot(photoCache[pk],date,meal):createEmptySlot(date,meal));
-        inner.appendChild(sw); inner.appendChild(buildFoodNotes(date,meal));
-        col.appendChild(inner); grid.appendChild(col);
-      });
-      card.appendChild(grid);
-      card.appendChild(buildDayFooter(date));
-
-      // 상태 적용 — 접기 없음, 모두 펼쳐진 상태
-      const isDone = notesCache[`${dk}:done`] === 'true';
-      if(isDone) card.classList.add('done');
-
-      sec.appendChild(card);
+      const today=isToday(date), dk=dateKey(date);
+      sec.appendChild(buildEditCard(date, dk, today));
     });
     main.appendChild(sec);
   });
+
+  // 완료된 기록 섹션
+  if(doneDates.length > 0) {
+    const completedSec = document.createElement('div'); completedSec.className='completed-section';
+    const hdr = document.createElement('div'); hdr.className='completed-header';
+    hdr.innerHTML=`<div class="completed-title">📁 완료된 기록 <span class="completed-count">${doneDates.length}일</span></div><div class="completed-line"></div>`;
+    completedSec.appendChild(hdr);
+    doneDates.forEach(date=>{
+      const dk=dateKey(date);
+      completedSec.appendChild(buildDoneCard(date, dk));
+    });
+    main.appendChild(completedSec);
+  }
+
+  // 오늘 카드 최상단 스크롤
   const todayCard=document.querySelector('.day-card.today');
-  if(todayCard) setTimeout(()=>todayCard.scrollIntoView({behavior:'smooth',block:'start'}),400);
+  if(todayCard) setTimeout(()=>todayCard.scrollIntoView({behavior:'smooth',block:'start'}),300);
 }
 
 async function loadAndRender(){
