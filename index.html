@@ -82,6 +82,22 @@ canvas#weightChart{width:100%;height:200px;display:block;border-radius:10px;}
 
 /* MAIN */
 .loading-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:80px;gap:14px;}
+.day-card.done .meal-grid{pointer-events:none;}
+.day-card.done .empty-slot,.day-card.done .uploading-slot{display:none;}
+.day-card.done .food-note-row{display:none;}
+.day-card.done .meal-time-btn{pointer-events:none;}
+.day-card.done .add-note-btn{display:none;}
+.day-card.done .meal-time-clear{display:none;}
+.day-card.collapsed .meal-grid,.day-card.collapsed .day-footer{display:none;}
+.day-card.collapsed .day-header{margin-bottom:0;}
+.finish-btn{margin-top:10px;width:100%;padding:8px;border:1px solid var(--gold);background:transparent;color:var(--gold);font-family:'Noto Serif KR',serif;font-size:12px;font-weight:600;border-radius:8px;cursor:pointer;transition:background .2s,color .2s;}
+.finish-btn:hover{background:var(--gold);color:#fff;}
+.done-badge{display:none;font-size:11px;color:var(--gold);font-weight:600;}
+.day-card.done .finish-btn{display:none;}
+.day-card.done .done-badge{display:inline-flex;align-items:center;gap:4px;}
+.day-card.collapsed .done-badge{display:inline-flex;}
+.expand-btn{background:none;border:none;color:var(--text3);font-size:11px;cursor:pointer;padding:2px 6px;border-radius:4px;margin-left:auto;}
+.expand-btn:hover{color:var(--gold);}
 .loading-spinner{width:32px;height:32px;border:3px solid var(--border);border-top-color:var(--gold);border-radius:50%;animation:spin .8s linear infinite;}
 .loading-text{font-size:14px;color:var(--text3);}
 main{max-width:980px;margin:0 auto;padding:24px 16px 80px;}
@@ -177,8 +193,17 @@ main{max-width:980px;margin:0 auto;padding:24px 16px 80px;}
 
 @media(max-width:640px){
   .header-title{font-size:19px;}.stat-count{font-size:24px;}
-  .meal-grid{gap:8px;}.day-card{padding:10px 12px;}
+  .meal-grid{grid-template-columns:1fr;gap:8px;}
+  .meal-col-inner{flex-direction:row;align-items:flex-start;gap:10px;}
+  .meal-col-inner .meal-label{writing-mode:initial;min-width:36px;}
+  .meal-col-inner .photo-slot{width:80px;height:80px;flex-shrink:0;}
+  .meal-col-inner > div:not(.meal-label):not([id^="slot-"]){flex:1;}
+  .day-card{padding:10px 12px;}
   .fasting-badge,.streak-badge{font-size:11px;padding:6px 10px;}
+  .user-btn{position:fixed;top:10px;right:12px;z-index:9999;padding:5px 10px;}
+  .logout-text{display:none;}
+  .user-name{display:none;}
+  .user-avatar{width:24px;height:24px;}
   .footer-input.w-exercise-type{width:100px;}.day-footer{gap:8px;}
 }
 </style>
@@ -722,12 +747,41 @@ function render(dates){
         inner.appendChild(sw); inner.appendChild(buildFoodNotes(date,meal));
         col.appendChild(inner); grid.appendChild(col);
       });
-      card.appendChild(grid); card.appendChild(buildDayFooter(date)); sec.appendChild(card);
+      // 끝내기 버튼
+      const finishRow = document.createElement('div');
+      finishRow.style.cssText = 'display:flex;align-items:center;gap:8px;margin-top:8px;';
+      const doneBadge = document.createElement('span');
+      doneBadge.className = 'done-badge'; doneBadge.innerHTML = '✅ 완료됨';
+      const expandBtn = document.createElement('button');
+      expandBtn.className = 'expand-btn'; expandBtn.textContent = '▼ 펼치기';
+      expandBtn.onclick = () => {
+        card.classList.remove('collapsed');
+        expandBtn.style.display = 'none';
+      };
+      expandBtn.style.display = 'none';
+      const finishBtn = document.createElement('button');
+      finishBtn.className = 'finish-btn'; finishBtn.textContent = '✅ 오늘 기록 완료';
+      finishBtn.onclick = async () => {
+        card.classList.add('done');
+        await fbPut('notes', `${dk}:done`, 'true');
+        expandBtn.style.display = '';
+      };
+      finishRow.appendChild(doneBadge); finishRow.appendChild(expandBtn); finishRow.appendChild(finishBtn);
+      card.appendChild(buildDayFooter(date)); card.appendChild(finishRow);
+
+      // 완료 상태 & 이전날 자동접기 적용
+      if(notesCache[`${dk}:done`]==='true'){
+        card.classList.add('done');
+        expandBtn.style.display = '';
+        if(!today) card.classList.add('collapsed');
+      }
+
+      sec.appendChild(card);
     });
     main.appendChild(sec);
   });
   const todayCard=document.querySelector('.day-card.today');
-  if(todayCard) setTimeout(()=>todayCard.scrollIntoView({behavior:'smooth',block:'center'}),400);
+  if(todayCard) setTimeout(()=>todayCard.scrollIntoView({behavior:'smooth',block:'start'}),400);
 }
 
 async function loadAndRender(){
