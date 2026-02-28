@@ -5,9 +5,333 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>나의 식사 기록 🍽️</title>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@300;400;600;700&family=DM+Serif+Display&display=swap" rel="stylesheet">
-<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js">
+// ── AI 오늘의 한마디 ──
+function saveApiKey() {
+  const key = document.getElementById('aiKeyInput').value.trim();
+  if(!key.startsWith('sk-ant-')) { alert('올바른 Anthropic API 키를 입력해주세요 (sk-ant-로 시작)'); return; }
+  localStorage.setItem('anthropic_api_key', key);
+  document.getElementById('aiKeyRow').style.display='none';
+  document.getElementById('aiKeyInput').value='';
+  fetchAiMessage();
+}
+
+async function fetchAiMessage() {
+  const apiKey = localStorage.getItem('anthropic_api_key');
+  if(!apiKey) { document.getElementById('aiKeyRow').style.display='flex'; return; }
+
+  const btn = document.getElementById('aiRefreshBtn');
+  const content = document.getElementById('aiContent');
+  btn.disabled = true; btn.textContent = '분석 중...';
+  content.innerHTML = '<div class="ai-loading">AI 전문가가 분석 중입니다...</div>';
+
+  // 데이터 수집
+  const dates = getDates();
+  const recentDates = dates.filter(d => {
+    const dk = dateKey(d);
+    return notesCache[`${dk}:done`] === 'true' || isToday(d);
+  }).slice(-7);
+
+  const records = recentDates.map(d => {
+    const dk = dateKey(d);
+    const meals = MEALS.map(m => {
+      const notes = (notesCache[noteKey(d, m.key)] || []).filter(n=>n&&n.trim());
+      const hasPhoto = !!photoCache[`${dk}:${m.key}`];
+      const time = timesCache[timeKey(d, m.key)] || '';
+      return `${m.label}: ${notes.length ? notes.join(', ') : '기록없음'}${time?' ('+time+')':''}`;
+    }).join(' | ');
+    const w = weightsCache[weightKey(d)];
+    const ex = exerciseCache[exKey(d)];
+    const exText = Array.isArray(ex) ? ex.filter(e=>e.type).map(e=>`${e.type} ${e.duration}분`).join(', ') : (ex&&ex.type?`${ex.type} ${ex.duration}분`:'');
+    return `[${d.getMonth()+1}/${d.getDate()}] ${meals} / 체중:${w||'?'}kg / 운동:${exText||'없음'}`;
+  }).join('
+');
+
+  // 목표 체중 달성 예측
+  const weightEntries = dates.map(d=>weightsCache[weightKey(d)]).filter(w=>typeof w==='number');
+  const goalWeight = 75;
+  let predText = '';
+  if(weightEntries.length >= 2) {
+    const first = weightEntries[0], last = weightEntries[weightEntries.length-1];
+    const diff = first - last;
+    const days = weightEntries.length;
+    const ratePerDay = diff / days;
+    if(ratePerDay > 0 && last > goalWeight) {
+      const daysNeeded = Math.round((last - goalWeight) / ratePerDay);
+      const targetDate = new Date();
+      targetDate.setDate(targetDate.getDate() + daysNeeded);
+      predText = `현재 추세: 일 평균 ${(ratePerDay*1000/1000).toFixed(3)}kg 감량. 목표 ${goalWeight}kg 달성 예상: 약 ${daysNeeded}일 후 (${targetDate.getMonth()+1}/${targetDate.getDate()})`;
+    } else if(ratePerDay <= 0) {
+      predText = '최근 체중이 감소하지 않고 있습니다. 식단과 운동을 점검해보세요.';
+    } else {
+      predText = `목표 체중 ${goalWeight}kg을 이미 달성했습니다! 🎉`;
+    }
+  }
+
+  const prompt = `당신은 10년차 다이어트 전문가입니다. 아래는 사용자의 최근 식단/운동/체중 기록입니다.
+
+${records || '아직 기록이 없습니다.'}
+
+목표 체중 달성 예측:
+${predText || '체중 데이터가 부족합니다.'}
+
+다음 3가지를 한국어로 작성해주세요 (각 섹션 앞에 이모지 포함, 전체 300자 이내):
+1. 💪 전문가 한마디 (격려와 솔직한 조언)
+2. 🍽️ 식단 피드백 (잘한 점과 개선점)
+3. 🎯 목표 달성 예측 (위 데이터 기반)
+
+친근하고 따뜻하되 전문적인 어조로 써주세요.`;
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 600,
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+    const data = await res.json();
+    if(data.error) throw new Error(data.error.message);
+    const text = data.content?.[0]?.text || '응답을 받지 못했습니다.';
+    content.innerHTML = `<div class="ai-message">${text.replace(/
+/g,'<br>')}</div>`;
+  } catch(err) {
+    if(err.message && err.message.includes('401')) {
+      localStorage.removeItem('anthropic_api_key');
+      document.getElementById('aiKeyRow').style.display='flex';
+      content.innerHTML = '<div class="ai-error">❌ API 키가 올바르지 않습니다. 다시 입력해주세요.</div>';
+    } else {
+      content.innerHTML = `<div class="ai-error">❌ 오류: ${err.message}</div>`;
+    }
+  }
+  btn.disabled = false; btn.textContent = '✨ 다시 분석';
+}
+</script>
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js">
+// ── AI 오늘의 한마디 ──
+function saveApiKey() {
+  const key = document.getElementById('aiKeyInput').value.trim();
+  if(!key.startsWith('sk-ant-')) { alert('올바른 Anthropic API 키를 입력해주세요 (sk-ant-로 시작)'); return; }
+  localStorage.setItem('anthropic_api_key', key);
+  document.getElementById('aiKeyRow').style.display='none';
+  document.getElementById('aiKeyInput').value='';
+  fetchAiMessage();
+}
+
+async function fetchAiMessage() {
+  const apiKey = localStorage.getItem('anthropic_api_key');
+  if(!apiKey) { document.getElementById('aiKeyRow').style.display='flex'; return; }
+
+  const btn = document.getElementById('aiRefreshBtn');
+  const content = document.getElementById('aiContent');
+  btn.disabled = true; btn.textContent = '분석 중...';
+  content.innerHTML = '<div class="ai-loading">AI 전문가가 분석 중입니다...</div>';
+
+  // 데이터 수집
+  const dates = getDates();
+  const recentDates = dates.filter(d => {
+    const dk = dateKey(d);
+    return notesCache[`${dk}:done`] === 'true' || isToday(d);
+  }).slice(-7);
+
+  const records = recentDates.map(d => {
+    const dk = dateKey(d);
+    const meals = MEALS.map(m => {
+      const notes = (notesCache[noteKey(d, m.key)] || []).filter(n=>n&&n.trim());
+      const hasPhoto = !!photoCache[`${dk}:${m.key}`];
+      const time = timesCache[timeKey(d, m.key)] || '';
+      return `${m.label}: ${notes.length ? notes.join(', ') : '기록없음'}${time?' ('+time+')':''}`;
+    }).join(' | ');
+    const w = weightsCache[weightKey(d)];
+    const ex = exerciseCache[exKey(d)];
+    const exText = Array.isArray(ex) ? ex.filter(e=>e.type).map(e=>`${e.type} ${e.duration}분`).join(', ') : (ex&&ex.type?`${ex.type} ${ex.duration}분`:'');
+    return `[${d.getMonth()+1}/${d.getDate()}] ${meals} / 체중:${w||'?'}kg / 운동:${exText||'없음'}`;
+  }).join('
+');
+
+  // 목표 체중 달성 예측
+  const weightEntries = dates.map(d=>weightsCache[weightKey(d)]).filter(w=>typeof w==='number');
+  const goalWeight = 75;
+  let predText = '';
+  if(weightEntries.length >= 2) {
+    const first = weightEntries[0], last = weightEntries[weightEntries.length-1];
+    const diff = first - last;
+    const days = weightEntries.length;
+    const ratePerDay = diff / days;
+    if(ratePerDay > 0 && last > goalWeight) {
+      const daysNeeded = Math.round((last - goalWeight) / ratePerDay);
+      const targetDate = new Date();
+      targetDate.setDate(targetDate.getDate() + daysNeeded);
+      predText = `현재 추세: 일 평균 ${(ratePerDay*1000/1000).toFixed(3)}kg 감량. 목표 ${goalWeight}kg 달성 예상: 약 ${daysNeeded}일 후 (${targetDate.getMonth()+1}/${targetDate.getDate()})`;
+    } else if(ratePerDay <= 0) {
+      predText = '최근 체중이 감소하지 않고 있습니다. 식단과 운동을 점검해보세요.';
+    } else {
+      predText = `목표 체중 ${goalWeight}kg을 이미 달성했습니다! 🎉`;
+    }
+  }
+
+  const prompt = `당신은 10년차 다이어트 전문가입니다. 아래는 사용자의 최근 식단/운동/체중 기록입니다.
+
+${records || '아직 기록이 없습니다.'}
+
+목표 체중 달성 예측:
+${predText || '체중 데이터가 부족합니다.'}
+
+다음 3가지를 한국어로 작성해주세요 (각 섹션 앞에 이모지 포함, 전체 300자 이내):
+1. 💪 전문가 한마디 (격려와 솔직한 조언)
+2. 🍽️ 식단 피드백 (잘한 점과 개선점)
+3. 🎯 목표 달성 예측 (위 데이터 기반)
+
+친근하고 따뜻하되 전문적인 어조로 써주세요.`;
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 600,
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+    const data = await res.json();
+    if(data.error) throw new Error(data.error.message);
+    const text = data.content?.[0]?.text || '응답을 받지 못했습니다.';
+    content.innerHTML = `<div class="ai-message">${text.replace(/
+/g,'<br>')}</div>`;
+  } catch(err) {
+    if(err.message && err.message.includes('401')) {
+      localStorage.removeItem('anthropic_api_key');
+      document.getElementById('aiKeyRow').style.display='flex';
+      content.innerHTML = '<div class="ai-error">❌ API 키가 올바르지 않습니다. 다시 입력해주세요.</div>';
+    } else {
+      content.innerHTML = `<div class="ai-error">❌ 오류: ${err.message}</div>`;
+    }
+  }
+  btn.disabled = false; btn.textContent = '✨ 다시 분석';
+}
+</script>
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js">
+// ── AI 오늘의 한마디 ──
+function saveApiKey() {
+  const key = document.getElementById('aiKeyInput').value.trim();
+  if(!key.startsWith('sk-ant-')) { alert('올바른 Anthropic API 키를 입력해주세요 (sk-ant-로 시작)'); return; }
+  localStorage.setItem('anthropic_api_key', key);
+  document.getElementById('aiKeyRow').style.display='none';
+  document.getElementById('aiKeyInput').value='';
+  fetchAiMessage();
+}
+
+async function fetchAiMessage() {
+  const apiKey = localStorage.getItem('anthropic_api_key');
+  if(!apiKey) { document.getElementById('aiKeyRow').style.display='flex'; return; }
+
+  const btn = document.getElementById('aiRefreshBtn');
+  const content = document.getElementById('aiContent');
+  btn.disabled = true; btn.textContent = '분석 중...';
+  content.innerHTML = '<div class="ai-loading">AI 전문가가 분석 중입니다...</div>';
+
+  // 데이터 수집
+  const dates = getDates();
+  const recentDates = dates.filter(d => {
+    const dk = dateKey(d);
+    return notesCache[`${dk}:done`] === 'true' || isToday(d);
+  }).slice(-7);
+
+  const records = recentDates.map(d => {
+    const dk = dateKey(d);
+    const meals = MEALS.map(m => {
+      const notes = (notesCache[noteKey(d, m.key)] || []).filter(n=>n&&n.trim());
+      const hasPhoto = !!photoCache[`${dk}:${m.key}`];
+      const time = timesCache[timeKey(d, m.key)] || '';
+      return `${m.label}: ${notes.length ? notes.join(', ') : '기록없음'}${time?' ('+time+')':''}`;
+    }).join(' | ');
+    const w = weightsCache[weightKey(d)];
+    const ex = exerciseCache[exKey(d)];
+    const exText = Array.isArray(ex) ? ex.filter(e=>e.type).map(e=>`${e.type} ${e.duration}분`).join(', ') : (ex&&ex.type?`${ex.type} ${ex.duration}분`:'');
+    return `[${d.getMonth()+1}/${d.getDate()}] ${meals} / 체중:${w||'?'}kg / 운동:${exText||'없음'}`;
+  }).join('
+');
+
+  // 목표 체중 달성 예측
+  const weightEntries = dates.map(d=>weightsCache[weightKey(d)]).filter(w=>typeof w==='number');
+  const goalWeight = 75;
+  let predText = '';
+  if(weightEntries.length >= 2) {
+    const first = weightEntries[0], last = weightEntries[weightEntries.length-1];
+    const diff = first - last;
+    const days = weightEntries.length;
+    const ratePerDay = diff / days;
+    if(ratePerDay > 0 && last > goalWeight) {
+      const daysNeeded = Math.round((last - goalWeight) / ratePerDay);
+      const targetDate = new Date();
+      targetDate.setDate(targetDate.getDate() + daysNeeded);
+      predText = `현재 추세: 일 평균 ${(ratePerDay*1000/1000).toFixed(3)}kg 감량. 목표 ${goalWeight}kg 달성 예상: 약 ${daysNeeded}일 후 (${targetDate.getMonth()+1}/${targetDate.getDate()})`;
+    } else if(ratePerDay <= 0) {
+      predText = '최근 체중이 감소하지 않고 있습니다. 식단과 운동을 점검해보세요.';
+    } else {
+      predText = `목표 체중 ${goalWeight}kg을 이미 달성했습니다! 🎉`;
+    }
+  }
+
+  const prompt = `당신은 10년차 다이어트 전문가입니다. 아래는 사용자의 최근 식단/운동/체중 기록입니다.
+
+${records || '아직 기록이 없습니다.'}
+
+목표 체중 달성 예측:
+${predText || '체중 데이터가 부족합니다.'}
+
+다음 3가지를 한국어로 작성해주세요 (각 섹션 앞에 이모지 포함, 전체 300자 이내):
+1. 💪 전문가 한마디 (격려와 솔직한 조언)
+2. 🍽️ 식단 피드백 (잘한 점과 개선점)
+3. 🎯 목표 달성 예측 (위 데이터 기반)
+
+친근하고 따뜻하되 전문적인 어조로 써주세요.`;
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 600,
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+    const data = await res.json();
+    if(data.error) throw new Error(data.error.message);
+    const text = data.content?.[0]?.text || '응답을 받지 못했습니다.';
+    content.innerHTML = `<div class="ai-message">${text.replace(/
+/g,'<br>')}</div>`;
+  } catch(err) {
+    if(err.message && err.message.includes('401')) {
+      localStorage.removeItem('anthropic_api_key');
+      document.getElementById('aiKeyRow').style.display='flex';
+      content.innerHTML = '<div class="ai-error">❌ API 키가 올바르지 않습니다. 다시 입력해주세요.</div>';
+    } else {
+      content.innerHTML = `<div class="ai-error">❌ 오류: ${err.message}</div>`;
+    }
+  }
+  btn.disabled = false; btn.textContent = '✨ 다시 분석';
+}
+</script>
 
 <style>
 :root {
@@ -271,7 +595,6 @@ main{max-width:980px;margin:0 auto;padding:24px 16px 80px;}
 .footer-input-row{display:flex;align-items:center;gap:6px;}
 .footer-input{padding:6px 10px;font-size:13px;font-family:'Noto Serif KR',serif;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--text);outline:none;transition:border-color .2s;}
 .footer-input:focus{border-color:var(--gold);background:#FFFDF7;}
-.footer-input.w-weight{width:80px;}
 .footer-input.w-exercise-type{width:130px;}
 .footer-input.w-exercise-dur{width:60px;}
 .footer-unit{font-size:12px;color:var(--text2);font-weight:600;}
@@ -304,9 +627,173 @@ main{max-width:980px;margin:0 auto;padding:24px 16px 80px;}
 }
 
 /* 위아래 이동 버튼 */
-.scroll-nav{position:fixed;right:16px;bottom:80px;z-index:1000;display:flex;flex-direction:column;gap:8px;}
-.scroll-nav-btn{width:42px;height:42px;border-radius:50%;border:1px solid var(--border);background:var(--surface);color:var(--text2);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 12px rgba(0,0,0,.12);transition:all .15s;}
-.scroll-nav-btn:hover{background:var(--gold);color:#fff;border-color:var(--gold);}
+.scroll-nav{position:fixed;right:16px;bottom:100px;z-index:1000;display:flex;flex-direction:column;gap:8px;}
+.scroll-nav-btn{width:40px;height:40px;border-radius:50%;border:1.5px solid var(--border);background:var(--surface);color:var(--text2);font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 10px rgba(0,0,0,.1);transition:all .2s;opacity:.85;}
+.scroll-nav-btn:hover{background:var(--gold);color:#fff;border-color:var(--gold);opacity:1;}
+
+/* ── 헤더 체중 인라인 ── */
+.header-actions { gap:10px; }
+.header-weight { display:flex; align-items:center; gap:4px; background:var(--surface2); border:1px solid var(--border); border-radius:8px; padding:4px 8px; }
+.header-weight-input { width:58px; border:none; background:transparent; font-family:inherit; font-size:13px; font-weight:600; color:var(--text); outline:none; text-align:center; }
+.header-weight-input::placeholder { color:var(--text3); font-weight:400; font-size:11px; }
+.header-weight-unit { font-size:11px; color:var(--text3); font-weight:600; }
+
+/* ── 운동 그리드 2x2 ── */
+.footer-block-ex { width:100%; }
+.exercise-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:4px; }
+.exercise-cell { display:flex; flex-direction:column; gap:4px; background:var(--surface2); border:1px solid var(--border); border-radius:8px; padding:6px 8px; position:relative; }
+.exercise-cell-add { display:flex; align-items:center; justify-content:center; background:transparent; border:1.5px dashed var(--border); border-radius:8px; padding:6px 8px; min-height:60px; }
+.ex-type { width:100%; border:none; background:transparent; font-family:inherit; font-size:12px; color:var(--text); outline:none; padding:0; }
+.ex-type::placeholder { color:var(--text3); }
+.ex-dur-wrap { display:flex; align-items:center; gap:4px; }
+.ex-dur { width:48px; border:none; background:transparent; font-family:inherit; font-size:12px; color:var(--text); outline:none; padding:0; }
+.ex-del { position:absolute; top:4px; right:4px; background:none; border:none; color:var(--text3); font-size:14px; cursor:pointer; line-height:1; padding:0 2px; }
+.ex-del:hover { color:#e55; }
+.ex-add-btn { font-size:12px; color:var(--gold); background:none; border:none; cursor:pointer; font-family:inherit; }
+.footer-block-ex .footer-label { margin-bottom:2px; }
+
+/* ── 애니메이션 ── */
+@keyframes floatY { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-6px)} }
+@keyframes shimmerGold { 0%{background-position:-200% 0} 100%{background-position:200% 0} }
+@keyframes cardEntrance { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
+@keyframes pulseGold { 0%,100%{box-shadow:0 4px 20px rgba(184,147,74,.15)} 50%{box-shadow:0 4px 30px rgba(184,147,74,.35)} }
+@keyframes sparkle { 0%,100%{opacity:0;transform:scale(0) rotate(0deg)} 50%{opacity:1;transform:scale(1) rotate(180deg)} }
+@keyframes waveIn { from{clip-path:inset(0 100% 0 0)} to{clip-path:inset(0 0% 0 0)} }
+@keyframes countUp { from{opacity:0;transform:scale(.8)} to{opacity:1;transform:scale(1)} }
+
+/* 카드 등장 애니메이션 */
+.day-card { animation:cardEntrance .4s ease both; }
+.day-card:nth-child(1){ animation-delay:.05s; }
+.day-card:nth-child(2){ animation-delay:.1s; }
+.day-card:nth-child(3){ animation-delay:.15s; }
+.day-card:nth-child(4){ animation-delay:.2s; }
+.day-card:nth-child(5){ animation-delay:.25s; }
+.done-card { animation:cardEntrance .4s ease both; }
+
+/* 오늘 카드 pulse */
+.day-card.today { animation:cardEntrance .4s ease both, pulseGold 3s ease-in-out 1s infinite; }
+
+/* streak 뱃지 float */
+.streak-badge:not(.zero) { animation:floatY 2.5s ease-in-out infinite; }
+
+/* 완료 버튼 shimmer */
+.finish-btn-sm { background-size:200% auto; }
+.finish-btn-sm:not(:disabled):hover { background-image:linear-gradient(135deg,#B8934A,#f0c060,#B8934A); background-size:200% auto; animation:shimmerGold .6s linear; }
+
+/* 월 헤더 라인 waveIn */
+.month-line { animation:waveIn .6s ease both; }
+.completed-line { animation:waveIn .6s ease both; }
+
+/* 사진 슬롯 hover 효과 */
+.photo-slot { transition:transform .2s ease; }
+.photo-slot:hover { transform:scale(1.02); }
+
+/* done 카드 체크 sparkle */
+.done-card .done-check { animation:sparkle 1s ease both, floatY 2s ease-in-out 1s infinite; display:inline-block; }
+
+/* stat count 등장 */
+.stat-count { animation:countUp .5s cubic-bezier(.34,1.56,.64,1) both; }
+
+/* empty slot 미묘한 float */
+.empty-slot { animation:floatY 3s ease-in-out infinite; animation-delay:var(--delay,0s); }
+
+/* progress fill 애니메이션 */
+.progress-fill { transition:width .8s cubic-bezier(.4,0,.2,1); }
+
+/* 배경 파티클 */
+.header::after { content:'✦'; position:absolute; top:20%; right:15%; font-size:10px; color:rgba(184,147,74,.2); animation:sparkle 3s ease-in-out infinite; pointer-events:none; }
+.header::before { content:'✦'; position:absolute; top:60%; right:25%; font-size:8px; color:rgba(184,147,74,.15); animation:sparkle 4s ease-in-out 1.5s infinite; pointer-events:none; }
+header { position:relative; overflow:hidden; }
+
+/* scroll-nav 버튼 float */
+.scroll-nav-btn { animation:floatY 3s ease-in-out infinite; }
+.scroll-nav-btn:last-child { animation-delay:.5s; }
+
+@media(max-width:640px){
+  .exercise-grid { grid-template-columns:1fr 1fr; gap:6px; }
+  .header-weight-input { width:48px; }
+}
+
+/* ── AI 오늘의 한마디 패널 ── */
+.ai-panel{max-width:980px;margin:16px auto 0;padding:0 16px;}
+.ai-panel-box{background:linear-gradient(135deg,#1A1208 0%,#241A0A 50%,#1A1208 100%);border:1px solid #4A3010;border-radius:18px;overflow:hidden;box-shadow:0 4px 24px rgba(184,147,74,.12);}
+.ai-panel-header{display:flex;align-items:center;gap:10px;padding:14px 20px 10px;border-bottom:1px solid #3A2510;}
+.ai-panel-title{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:700;color:#F5E6C0;flex:1;}
+.ai-badge{font-size:10px;background:linear-gradient(135deg,#B8934A,#D4A85C);color:#fff;padding:2px 8px;border-radius:20px;font-weight:600;}
+.ai-refresh-btn{padding:6px 14px;border:1px solid #B8934A;background:transparent;color:#D4A85C;font-family:inherit;font-size:12px;font-weight:700;border-radius:8px;cursor:pointer;transition:all .2s;white-space:nowrap;}
+.ai-refresh-btn:hover{background:#B8934A;color:#fff;}
+.ai-refresh-btn:disabled{opacity:.5;cursor:not-allowed;}
+.ai-key-row{display:flex;gap:8px;padding:8px 20px;background:#110C04;border-bottom:1px solid #2A1A08;}
+.ai-key-input{flex:1;padding:6px 10px;font-size:12px;font-family:inherit;border:1px solid #4A3010;border-radius:6px;background:#1A1208;color:#F5E6C0;outline:none;}
+.ai-key-input::placeholder{color:#6A5030;}
+.ai-key-save-btn{padding:6px 12px;border:none;background:#B8934A;color:#fff;font-family:inherit;font-size:12px;font-weight:700;border-radius:6px;cursor:pointer;}
+.ai-content{padding:16px 20px;min-height:60px;}
+.ai-placeholder{color:#6A5030;font-size:13px;text-align:center;padding:12px 0;}
+.ai-message{color:#F5E6C0;font-size:13px;line-height:1.9;white-space:pre-wrap;}
+.ai-message .ai-section{margin-bottom:12px;}
+.ai-message .ai-section-title{color:#D4A85C;font-weight:700;font-size:12px;margin-bottom:4px;display:flex;align-items:center;gap:4px;}
+.ai-loading{display:flex;align-items:center;gap:8px;color:#8A6030;font-size:13px;}
+.ai-loading::before{content:'';width:16px;height:16px;border:2px solid #4A3010;border-top-color:#B8934A;border-radius:50%;animation:spin .8s linear infinite;flex-shrink:0;}
+.ai-error{color:#E57373;font-size:12px;padding:8px 0;}
+.ai-key-hint{font-size:11px;color:#8A6030;padding:6px 20px 10px;text-align:right;}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes typewriter{from{opacity:0}to{opacity:1}}
+.ai-message{animation:typewriter .3s ease both;}
+
+/* ── API Key 설정 모달 ── */
+.ai-header-btns{display:flex;align-items:center;gap:8px;}
+.ai-key-btn{width:32px;height:32px;border:1px solid #4A3010;background:transparent;color:#8A7060;font-size:15px;border-radius:8px;cursor:pointer;transition:all .2s;display:flex;align-items:center;justify-content:center;}
+.ai-key-btn:hover{border-color:#B8934A;color:#D4A85C;background:rgba(184,147,74,.1);}
+.ai-key-btn.has-key{border-color:#2A6A30;color:#5ADC7A;background:rgba(40,180,60,.08);}
+
+.apikey-modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9000;backdrop-filter:blur(4px);align-items:center;justify-content:center;padding:20px;}
+.apikey-modal-overlay.open{display:flex;animation:overlayIn .2s ease;}
+.apikey-modal{background:#1A1208;border:1px solid #4A3010;border-radius:22px;width:100%;max-width:440px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.6);animation:modalIn .3s cubic-bezier(.34,1.56,.64,1);}
+
+.apikey-modal-header{display:flex;align-items:center;gap:12px;padding:20px 20px 16px;border-bottom:1px solid #2A1A08;}
+.apikey-modal-icon{font-size:32px;width:52px;height:52px;background:linear-gradient(135deg,#1C2A10,#2A3A10);border:1px solid #3A5010;border-radius:14px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.apikey-modal-titles{flex:1;}
+.apikey-modal-title{font-size:17px;font-weight:700;color:#F5E6C0;}
+.apikey-modal-subtitle{font-size:11px;color:#5A4020;margin-top:3px;}
+.apikey-modal-close{width:28px;height:28px;border:1px solid #3A2510;background:transparent;color:#5A4020;border-radius:50%;cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .2s;}
+.apikey-modal-close:hover{border-color:#B8934A;color:#D4A85C;}
+
+.apikey-modal-body{padding:16px 20px;}
+.apikey-item{background:#110C04;border:1px solid #2A1A08;border-radius:14px;padding:14px 16px;margin-bottom:10px;}
+.apikey-item.selected{border-color:#B8934A;box-shadow:0 0 0 1px rgba(184,147,74,.2);}
+.apikey-item-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
+.apikey-item-left{display:flex;align-items:center;gap:8px;}
+.apikey-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
+.apikey-dot.claude{background:#D4A85C;}
+.apikey-item-label{font-size:13px;font-weight:700;color:#D8C090;}
+.apikey-item-tag{font-size:10px;padding:2px 8px;border-radius:20px;font-weight:600;}
+.apikey-item-tag.recommend{background:rgba(184,147,74,.2);color:#D4A85C;border:1px solid rgba(184,147,74,.3);}
+.apikey-status{font-size:11px;font-weight:600;}
+.apikey-status.ok{color:#5ADC7A;}
+.apikey-status.err{color:#F07070;}
+.apikey-status.testing{color:#8A9070;animation:txtFade 1s infinite;}
+
+.apikey-input-wrap{display:flex;align-items:center;border:1px solid #3A2510;border-radius:10px;overflow:hidden;background:#1A1208;transition:border-color .2s;}
+.apikey-input-wrap:focus-within{border-color:#B8934A;}
+.apikey-input{flex:1;padding:10px 12px;font-size:12px;font-family:inherit;border:none;background:transparent;color:#F5E6C0;outline:none;}
+.apikey-input::placeholder{color:#4A3010;}
+.apikey-toggle{padding:8px 12px;border:none;background:transparent;color:#5A4020;cursor:pointer;font-size:14px;transition:color .2s;}
+.apikey-toggle:hover{color:#D4A85C;}
+.apikey-hint{font-size:10px;color:#4A3010;margin-top:7px;display:flex;gap:6px;align-items:center;}
+.apikey-hint a{color:#7A5030;text-decoration:none;}
+.apikey-hint a:hover{color:#B8934A;}
+
+.apikey-modal-footer{padding:0 20px 12px;display:flex;gap:8px;}
+.apikey-test-btn{flex:0 0 auto;padding:12px 16px;border:1px solid #4A3010;background:transparent;color:#8A7060;font-family:inherit;font-size:13px;font-weight:700;border-radius:12px;cursor:pointer;transition:all .2s;}
+.apikey-test-btn:hover{border-color:#B8934A;color:#D4A85C;}
+.apikey-save-btn{flex:1;padding:12px;border:none;background:linear-gradient(135deg,#2A6A20,#3A8A30);color:#fff;font-family:inherit;font-size:14px;font-weight:700;border-radius:12px;cursor:pointer;transition:all .2s;}
+.apikey-save-btn:hover{background:linear-gradient(135deg,#3A8A30,#4AAA40);box-shadow:0 4px 16px rgba(60,180,50,.3);}
+.apikey-later{text-align:center;padding:0 20px 16px;font-size:12px;color:#4A3010;cursor:pointer;text-decoration:underline;}
+.apikey-later:hover{color:#8A7060;}
+
+@keyframes overlayIn{from{opacity:0}to{opacity:1}}
+@keyframes modalIn{from{opacity:0;transform:scale(.92) translateY(10px)}to{opacity:1;transform:scale(1) translateY(0)}}
+@keyframes txtFade{0%,100%{opacity:.5}50%{opacity:1}}
 </style>
 </head>
 <body>
@@ -325,7 +812,7 @@ main{max-width:980px;margin:0 auto;padding:24px 16px 80px;}
 <header>
   <div class="header-inner">
     <div class="header-left">
-      <div class="header-label">Daily Meal Journal · 2025 &nbsp;|&nbsp; <span id="kstClock"></span></div>
+      <div class="header-label">Daily Meal Journal · 2025</div>
       <div class="header-title">나의 식사 기록</div>
       <div class="header-subtitle">2월 27일 — 4월 30일 · 다이어트 목표</div>
     </div>
@@ -393,6 +880,61 @@ main{max-width:980px;margin:0 auto;padding:24px 16px 80px;}
 </div>
 
 
+
+<!-- AI 오늘의 한마디 -->
+<div class="ai-panel" id="aiPanel" style="display:none">
+  <div class="ai-panel-box">
+    <div class="ai-panel-header">
+      <div class="ai-panel-title"><span>🤖</span><span>AI 오늘의 한마디</span><span class="ai-badge">10년차 다이어트 전문가</span></div>
+      <div class="ai-header-btns">
+        <button class="ai-key-btn" id="aiKeyBtn" onclick="openApiKeyModal()" title="API 키 설정">🔑</button>
+        <button class="ai-refresh-btn" id="aiRefreshBtn" onclick="fetchAiMessage()">✨ 분석하기</button>
+      </div>
+    </div>
+    <div class="ai-content" id="aiContent">
+      <div class="ai-placeholder">✨ 분석하기를 눌러 AI 전문가의 조언을 받아보세요</div>
+    </div>
+  </div>
+</div>
+
+<!-- API Key 설정 모달 -->
+<div class="apikey-modal-overlay" id="apikeyModalOverlay" onclick="closeApiKeyModal(event)">
+  <div class="apikey-modal">
+    <div class="apikey-modal-header">
+      <div class="apikey-modal-icon">🤖</div>
+      <div class="apikey-modal-titles">
+        <div class="apikey-modal-title">AI 분석 설정</div>
+        <div class="apikey-modal-subtitle">API 키는 브라우저에만 저장되며 서버로 전송되지 않아요</div>
+      </div>
+      <button class="apikey-modal-close" onclick="closeApiKeyModal()">✕</button>
+    </div>
+    <div class="apikey-modal-body">
+      <div class="apikey-item" id="apikeyItemClaude">
+        <div class="apikey-item-header">
+          <div class="apikey-item-left">
+            <span class="apikey-dot claude"></span>
+            <span class="apikey-item-label">Claude API Key</span>
+            <span class="apikey-item-tag recommend">추천</span>
+          </div>
+          <div class="apikey-status" id="claudeStatus"></div>
+        </div>
+        <div class="apikey-input-wrap">
+          <input type="password" id="claudeKeyInput" class="apikey-input" placeholder="sk-ant-api03-...">
+          <button class="apikey-toggle" onclick="toggleKeyVisibility('claudeKeyInput',this)">👁</button>
+        </div>
+        <div class="apikey-hint">
+          <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a>
+          → Billing $5 충전 → API Keys
+        </div>
+      </div>
+    </div>
+    <div class="apikey-modal-footer">
+      <button class="apikey-test-btn" id="claudeTestBtn" onclick="testApiKey()">연결 테스트</button>
+      <button class="apikey-save-btn" onclick="saveApiKeyModal()">✓ 저장하고 시작하기</button>
+    </div>
+    <div class="apikey-later" onclick="closeApiKeyModal()">나중에 설정할게요</div>
+  </div>
+</div>
 
 <div id="loadingScreen" class="loading-screen" style="display:none">
   <div class="loading-spinner"></div>
@@ -785,34 +1327,30 @@ function buildDayFooter(date){
   const wk=weightKey(date),ek=exKey(date);
   const wVal=weightsCache[wk],eVal=exerciseCache[ek]||{type:'',duration:''};
   const footer=document.createElement('div'); footer.className='day-footer';
-  const wBlock=document.createElement('div'); wBlock.className='footer-block'; wBlock.innerHTML='<div class="footer-label">⚖️ 체중</div>';
-  const wRow=document.createElement('div'); wRow.className='footer-input-row';
-  const wInput=document.createElement('input'); wInput.type='number'; wInput.className='footer-input w-weight'; wInput.placeholder='00.0'; wInput.step='0.1'; wInput.min='20'; wInput.max='300'; wInput.value=wVal!=null?wVal:'';
-  wInput.addEventListener('blur',()=>{ const v=parseFloat(wInput.value); if(!isNaN(v)&&v>=20){ weightsCache[wk]=v; fbPut('weights',wk,v).then(()=>{ drawWeightChart(); updateWeightMeta(); updateGoalBox(); document.getElementById('weightPanel').style.display=''; }).catch(console.error); } });
-  const wUnit=document.createElement('span'); wUnit.className='footer-unit'; wUnit.textContent='kg';
-  wRow.appendChild(wInput); wRow.appendChild(wUnit); wBlock.appendChild(wRow); footer.appendChild(wBlock);
-  const eBlock=document.createElement('div'); eBlock.className='footer-block'; eBlock.innerHTML='<div class="footer-label">💪 운동</div>';
-  // 운동 최대 3개, 기존 데이터 배열로 관리
+  // 체중은 헤더에 인라인으로 이동됨
+  const eBlock=document.createElement('div'); eBlock.className='footer-block footer-block-ex'; eBlock.innerHTML='<div class="footer-label">💪 운동</div>';
   const exList = Array.isArray(eVal) ? eVal : (eVal&&eVal.type ? [eVal] : [{}]);
   if(exList.length===0) exList.push({});
-  const eItemsWrap = document.createElement('div'); eItemsWrap.className='exercise-items';
+  const eGrid = document.createElement('div'); eGrid.className='exercise-grid';
   function renderExItems() {
-    eItemsWrap.innerHTML='';
+    eGrid.innerHTML='';
     exList.forEach((ex,idx)=>{
-      const eRow=document.createElement('div'); eRow.className='footer-input-row'; eRow.style.marginBottom='4px';
-      const eType=document.createElement('input'); eType.type='text'; eType.className='footer-input w-exercise-type'; eType.placeholder='종류'; eType.value=ex.type||''; eType.maxLength=20;
-      const eDur=document.createElement('input'); eDur.type='number'; eDur.className='footer-input w-exercise-dur'; eDur.placeholder='0'; eDur.min='0'; eDur.max='600'; eDur.value=ex.duration||'';
+      const cell=document.createElement('div'); cell.className='exercise-cell';
+      const eType=document.createElement('input'); eType.type='text'; eType.className='footer-input ex-type'; eType.placeholder='종류'; eType.value=ex.type||''; eType.maxLength=20;
+      const eDurWrap=document.createElement('div'); eDurWrap.className='ex-dur-wrap';
+      const eDur=document.createElement('input'); eDur.type='number'; eDur.className='footer-input ex-dur'; eDur.placeholder='0'; eDur.min='0'; eDur.max='600'; eDur.value=ex.duration||'';
       const eUnit=document.createElement('span'); eUnit.className='footer-unit'; eUnit.textContent='분';
       function saveEx(){ exList[idx]={type:eType.value.trim(),duration:eDur.value}; exerciseCache[ek]=exList; fbPut('exercise',ek,exList).catch(console.error); }
       eType.addEventListener('blur',saveEx); eDur.addEventListener('blur',saveEx);
-      eRow.appendChild(eType); eRow.appendChild(eDur); eRow.appendChild(eUnit);
-      if(idx>0){ const del=document.createElement('button'); del.textContent='×'; del.style.cssText='background:none;border:none;color:#C4B494;font-size:16px;cursor:pointer;padding:0 4px;'; del.onclick=()=>{ exList.splice(idx,1); exerciseCache[ek]=exList; fbPut('exercise',ek,exList).catch(console.error); renderExItems(); }; eRow.appendChild(del); }
-      eItemsWrap.appendChild(eRow);
+      eDurWrap.appendChild(eDur); eDurWrap.appendChild(eUnit);
+      if(idx>0){ const del=document.createElement('button'); del.textContent='×'; del.className='ex-del'; del.onclick=()=>{ exList.splice(idx,1); exerciseCache[ek]=exList; fbPut('exercise',ek,exList).catch(console.error); renderExItems(); }; cell.appendChild(del); }
+      cell.appendChild(eType); cell.appendChild(eDurWrap);
+      eGrid.appendChild(cell);
     });
-    if(exList.length<3){ const addBtn=document.createElement('button'); addBtn.textContent='+ 운동 추가'; addBtn.style.cssText='font-size:11px;color:var(--gold);background:none;border:none;cursor:pointer;padding:2px 0;font-family:inherit;'; addBtn.onclick=()=>{ exList.push({}); renderExItems(); }; eItemsWrap.appendChild(addBtn); }
+    if(exList.length<4){ const addCell=document.createElement('div'); addCell.className='exercise-cell-add'; const addBtn=document.createElement('button'); addBtn.textContent='+ 추가'; addBtn.className='ex-add-btn'; addBtn.onclick=()=>{ exList.push({}); renderExItems(); }; addCell.appendChild(addBtn); eGrid.appendChild(addCell); }
   }
   renderExItems();
-  eBlock.appendChild(eItemsWrap); footer.appendChild(eBlock);
+  eBlock.appendChild(eGrid); footer.appendChild(eBlock);
   return footer;
 }
 
@@ -881,6 +1419,13 @@ function buildEditCard(date, dk, today) {
   // 헤더
   const header = document.createElement('div'); header.className='day-header';
   const headerActions = document.createElement('div'); headerActions.className='header-actions';
+  // 체중 인라인 입력
+  const wk2=weightKey(date);
+  const wInlineWrap = document.createElement('div'); wInlineWrap.className='header-weight';
+  const wInlineInput = document.createElement('input'); wInlineInput.type='number'; wInlineInput.className='header-weight-input'; wInlineInput.placeholder='체중'; wInlineInput.step='0.1'; wInlineInput.min='20'; wInlineInput.max='300'; wInlineInput.value=weightsCache[wk2]!=null?weightsCache[wk2]:'';
+  const wInlineUnit = document.createElement('span'); wInlineUnit.className='header-weight-unit'; wInlineUnit.textContent='kg';
+  wInlineInput.addEventListener('blur',()=>{ const v=parseFloat(wInlineInput.value); if(!isNaN(v)&&v>=20){ weightsCache[wk2]=v; fbPut('weights',wk2,v).then(()=>{ drawWeightChart(); updateWeightMeta(); updateGoalBox(); }).catch(console.error); } });
+  wInlineWrap.appendChild(wInlineInput); wInlineWrap.appendChild(wInlineUnit);
   const finishBtnSm = document.createElement('button'); finishBtnSm.className='finish-btn-sm'; finishBtnSm.textContent='✅ 기록 완료';
   finishBtnSm.onclick = async () => {
     finishBtnSm.textContent = '저장 중...';
@@ -893,6 +1438,7 @@ function buildEditCard(date, dk, today) {
     const completedSec = document.querySelector('.completed-section');
     if(completedSec) setTimeout(()=>completedSec.scrollIntoView({behavior:'smooth',block:'start'}),200);
   };
+  headerActions.appendChild(wInlineWrap);
   headerActions.appendChild(finishBtnSm);
   header.innerHTML = `<div class="day-badge"><div class="day-dow">${DOW[date.getDay()]}</div></div><div class="day-info"><div class="day-info-title">${date.getDate()}일${today?'<span class="today-badge">오늘</span>':''}</div><div class="day-status" id="status-${dk}">${statusText}</div></div>`;
   header.appendChild(headerActions);
@@ -990,7 +1536,7 @@ function render(dates){
   const doneDates = dates.filter(d=>{
     const dk=dateKey(d);
     return notesCache[`${dk}:done`] === 'true';
-  }).sort((a,b)=>b-a); // 최신순
+  }).sort((a,b)=>a-b); // 오름차순 (오래된 순)
 
   // 미완료 섹션 (월별)
   const months={};
@@ -1035,18 +1581,177 @@ async function loadAndRender(){
   document.getElementById('mainContent').style.display='';
   document.getElementById('weightPanel').style.display='';
   document.getElementById('scrollNav').style.display='';
+  document.getElementById('aiPanel').style.display='';
+  const savedKey = localStorage.getItem('anthropic_api_key');
+  if(savedKey) { const kb=document.getElementById('aiKeyBtn'); if(kb) kb.classList.add('has-key'); }
   render(getDates()); updateStats(); updateStreak(); updateFastingTimer(); updateWeightMeta(); updateGoalBox(); 
   setTimeout(()=>drawWeightChart(),100);
   if(fastingInterval) clearInterval(fastingInterval);
   fastingInterval=setInterval(updateFastingTimer,60000);
-  function updateKstClock(){
-    const n=nowKST();
-    const hh=String(n.getHours()).padStart(2,'0'), mm=String(n.getMinutes()).padStart(2,'0'), ss=String(n.getSeconds()).padStart(2,'0');
-    const el=document.getElementById('kstClock');
-    if(el) el.textContent=`${hh}:${mm}:${ss} KST`;
-  }
-  updateKstClock(); setInterval(updateKstClock,1000);
+
   window.addEventListener('resize',()=>setTimeout(drawWeightChart,100));
+}
+
+// ── AI 오늘의 한마디 ──
+
+function openApiKeyModal() {
+  const overlay = document.getElementById('apikeyModalOverlay');
+  overlay.classList.add('open');
+  // 기존 키 채우기
+  const savedKey = localStorage.getItem('anthropic_api_key');
+  if(savedKey) {
+    document.getElementById('claudeKeyInput').value = savedKey;
+    updateKeyStatus('claude', '✅ 저장됨', 'ok');
+  }
+}
+
+function closeApiKeyModal(e) {
+  if(e && e.target !== document.getElementById('apikeyModalOverlay')) return;
+  document.getElementById('apikeyModalOverlay').classList.remove('open');
+}
+
+function toggleKeyVisibility(inputId, btn) {
+  const inp = document.getElementById(inputId);
+  if(inp.type==='password'){inp.type='text';btn.textContent='🙈';}
+  else{inp.type='password';btn.textContent='👁';}
+}
+
+function updateKeyStatus(type, msg, cls) {
+  const el = document.getElementById(type+'Status');
+  if(!el) return;
+  el.textContent = msg;
+  el.className = 'apikey-status ' + cls;
+}
+
+async function testApiKey() {
+  const key = document.getElementById('claudeKeyInput').value.trim();
+  if(!key){alert('API 키를 입력해주세요.');return;}
+  const btn = document.getElementById('claudeTestBtn');
+  btn.textContent='테스트 중...'; btn.disabled=true;
+  updateKeyStatus('claude','⏳ 테스트 중...','testing');
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+      body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:10,messages:[{role:'user',content:'hi'}]})
+    });
+    const data = await res.json();
+    if(data.error) throw new Error(data.error.message);
+    updateKeyStatus('claude','✅ 정상','ok');
+  } catch(err) {
+    updateKeyStatus('claude','❌ '+(err.message||'오류'),'err');
+  }
+  btn.textContent='연결 테스트'; btn.disabled=false;
+}
+
+function saveApiKeyModal() {
+  const key = document.getElementById('claudeKeyInput').value.trim();
+  if(!key.startsWith('sk-ant-')){alert('올바른 Anthropic API 키를 입력해주세요 (sk-ant-로 시작)');return;}
+  localStorage.setItem('anthropic_api_key', key);
+  const btn = document.getElementById('aiKeyBtn');
+  if(btn) btn.classList.add('has-key');
+  document.getElementById('apikeyModalOverlay').classList.remove('open');
+  fetchAiMessage();
+}
+
+// 구 saveApiKey 호환
+function saveApiKey() { saveApiKeyModal(); }
+
+async function fetchAiMessage() {
+  const apiKey = localStorage.getItem('anthropic_api_key');
+  if(!apiKey) { openApiKeyModal(); return; }
+
+  const btn = document.getElementById('aiRefreshBtn');
+  const content = document.getElementById('aiContent');
+  btn.disabled = true; btn.textContent = '분석 중...';
+  content.innerHTML = '<div class="ai-loading">AI 전문가가 분석 중입니다...</div>';
+
+  // 데이터 수집
+  const dates = getDates();
+  const recentDates = dates.filter(d => {
+    const dk = dateKey(d);
+    return notesCache[`${dk}:done`] === 'true' || isToday(d);
+  }).slice(-7);
+
+  const records = recentDates.map(d => {
+    const dk = dateKey(d);
+    const meals = MEALS.map(m => {
+      const notes = (notesCache[noteKey(d, m.key)] || []).filter(n=>n&&n.trim());
+      const time = timesCache[timeKey(d, m.key)] || '';
+      return `${m.label}: ${notes.length ? notes.join(', ') : '기록없음'}${time?' ('+time+')':''}`;
+    }).join(' | ');
+    const w = weightsCache[weightKey(d)];
+    const ex = exerciseCache[exKey(d)];
+    const exText = Array.isArray(ex) ? ex.filter(e=>e.type).map(e=>`${e.type} ${e.duration}분`).join(', ') : (ex&&ex.type?`${ex.type} ${ex.duration}분`:'');
+    return `[${d.getMonth()+1}/${d.getDate()}] ${meals} / 체중:${w||'?'}kg / 운동:${exText||'없음'}`;
+  }).join('\n');
+
+  // 목표 체중 달성 예측
+  const weightEntries = dates.map(d=>weightsCache[weightKey(d)]).filter(w=>typeof w==='number');
+  const goalWeight = 75;
+  let predText = '';
+  if(weightEntries.length >= 2) {
+    const first = weightEntries[0], last = weightEntries[weightEntries.length-1];
+    const diff = first - last;
+    const days = weightEntries.length;
+    const ratePerDay = diff / days;
+    if(ratePerDay > 0 && last > goalWeight) {
+      const daysNeeded = Math.round((last - goalWeight) / ratePerDay);
+      const targetDate = new Date();
+      targetDate.setDate(targetDate.getDate() + daysNeeded);
+      predText = `현재 추세: 일 평균 ${ratePerDay.toFixed(3)}kg 감량. 목표 ${goalWeight}kg 달성 예상: 약 ${daysNeeded}일 후 (${targetDate.getMonth()+1}/${targetDate.getDate()})`;
+    } else if(ratePerDay <= 0) {
+      predText = '최근 체중이 감소하지 않고 있습니다. 식단과 운동을 점검해보세요.';
+    } else {
+      predText = `목표 체중 ${goalWeight}kg을 이미 달성했습니다! 🎉`;
+    }
+  }
+
+  const prompt = `당신은 10년차 다이어트 전문가입니다. 아래는 사용자의 최근 식단/운동/체중 기록입니다.
+
+${records || '아직 기록이 없습니다.'}
+
+목표 체중 달성 예측:
+${predText || '체중 데이터가 부족합니다.'}
+
+다음 3가지를 한국어로 작성해주세요 (각 섹션 앞에 이모지 포함, 전체 300자 이내):
+1. 💪 전문가 한마디 (격려와 솔직한 조언)
+2. 🍽️ 식단 피드백 (잘한 점과 개선점)
+3. 🎯 목표 달성 예측 (위 데이터 기반)
+
+친근하고 따뜻하되 전문적인 어조로 써주세요.`;
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 600,
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+    const data = await res.json();
+    if(data.error) throw new Error(data.error.message);
+    const text = data.content?.[0]?.text || '응답을 받지 못했습니다.';
+    content.innerHTML = `<div class="ai-message">${text.replace(/\n/g,'<br>')}</div>`;
+  } catch(err) {
+    if(err.message && err.message.includes('401')) {
+      localStorage.removeItem('anthropic_api_key');
+      const btn2 = document.getElementById('aiKeyBtn');
+      if(btn2) btn2.classList.remove('has-key');
+      openApiKeyModal();
+      content.innerHTML = '<div class="ai-error">❌ API 키가 올바르지 않습니다. 다시 입력해주세요.</div>';
+    } else {
+      content.innerHTML = `<div class="ai-error">❌ 오류: ${err.message}</div>`;
+    }
+  }
+  btn.disabled = false; btn.textContent = '✨ 다시 분석';
 }
 </script>
 </body>
