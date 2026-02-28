@@ -37,10 +37,10 @@ header{background:#1C1410;color:var(--gold-light);padding:20px 24px;position:sti
 .header-title{font-family:'DM Serif Display',serif;font-size:24px;font-weight:400;}
 .header-subtitle{font-size:11px;color:#8A7560;margin-top:2px;}
 .header-right{display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
-.streak-badge{background:linear-gradient(135deg,#FF6B35,#FF4500);color:#fff;padding:8px 14px;border-radius:20px;font-size:13px;font-weight:700;display:flex;align-items:center;gap:6px;box-shadow:0 4px 12px rgba(255,107,53,.4);white-space:nowrap;}
+.streak-badge{background:linear-gradient(135deg,#FF6B35,#FF4500);color:#fff;padding:8px 14px;border-radius:20px;font-size:12px;font-weight:700;display:flex;align-items:center;gap:6px;box-shadow:0 4px 12px rgba(255,107,53,.4);white-space:nowrap;height:38px;}
 .streak-badge.zero{background:#2C1F10;color:#8A7560;box-shadow:none;}
-.fasting-badge{background:#1A2840;color:#60A0D0;padding:8px 14px;border-radius:20px;font-size:12px;display:flex;align-items:center;gap:6px;white-space:nowrap;border:1px solid #2A4060;}
-.fasting-badge .fasting-time{font-family:'DM Serif Display',serif;font-size:16px;font-weight:700;color:#80C0F0;}
+.fasting-badge{background:#1A2840;color:#60A0D0;padding:8px 14px;border-radius:20px;font-size:12px;display:flex;align-items:center;gap:6px;white-space:nowrap;border:1px solid #2A4060;height:38px;}
+.fasting-badge .fasting-time{font-family:'DM Serif Display',serif;font-size:14px;font-weight:700;color:#80C0F0;}
 .header-stat{text-align:right;}
 .stat-count{font-family:'DM Serif Display',serif;font-size:30px;color:var(--gold);line-height:1;}
 .stat-label{font-size:10px;color:#8A7560;letter-spacing:1px;margin-top:2px;}
@@ -221,7 +221,7 @@ main{max-width:980px;margin:0 auto;padding:24px 16px 80px;}
 .meal-time-btn-icon{font-size:10px;flex-shrink:0;}
 .meal-time-clear{flex-shrink:0;width:16px;height:16px;border:none;background:none;color:#C8B898;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;border-radius:50%;padding:0;line-height:1;transition:color .15s;}
 .meal-time-clear:hover{color:#e05050;}
-.time-picker-popup{position:absolute;top:calc(100% + 4px);left:0;z-index:500;background:#fff;border:1px solid var(--border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.12);padding:10px;width:200px;animation:popIn .15s ease;}
+.time-picker-popup{position:fixed;z-index:9000;background:#fff;border:1px solid var(--border);border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.2);padding:12px;width:220px;animation:popIn .15s ease;}
 @keyframes popIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
 .tp-ampm{display:flex;gap:4px;margin-bottom:8px;}
 .tp-ampm-btn{flex:1;padding:5px 0;font-size:12px;font-weight:700;font-family:'Noto Serif KR',serif;border:1px solid var(--border);border-radius:7px;background:var(--surface2);color:var(--text3);cursor:pointer;transition:all .15s;}
@@ -295,12 +295,18 @@ main{max-width:980px;margin:0 auto;padding:24px 16px 80px;}
   .food-add-btn{font-size:10px;}
   .day-card{padding:10px 12px;}
   .fasting-badge,.streak-badge{font-size:11px;padding:6px 10px;}
-  .user-btn{position:fixed;top:10px;right:12px;z-index:9999;padding:5px 10px;}
+  .user-btn{position:fixed;top:10px;right:12px;z-index:9999;padding:0;background:transparent !important;border:none !important;box-shadow:none !important;}
+  .user-btn .user-avatar{width:34px;height:34px;border-radius:50%;border:2px solid rgba(255,255,255,.3);}
   .logout-text{display:none;}
   .user-name{display:none;}
   .user-avatar{width:24px;height:24px;}
   .footer-input.w-exercise-type{width:100px;}.day-footer{gap:8px;}
 }
+
+/* 위아래 이동 버튼 */
+.scroll-nav{position:fixed;right:16px;bottom:80px;z-index:1000;display:flex;flex-direction:column;gap:8px;}
+.scroll-nav-btn{width:42px;height:42px;border-radius:50%;border:1px solid var(--border);background:var(--surface);color:var(--text2);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 12px rgba(0,0,0,.12);transition:all .15s;}
+.scroll-nav-btn:hover{background:var(--gold);color:#fff;border-color:var(--gold);}
 </style>
 </head>
 <body>
@@ -319,7 +325,7 @@ main{max-width:980px;margin:0 auto;padding:24px 16px 80px;}
 <header>
   <div class="header-inner">
     <div class="header-left">
-      <div class="header-label">Daily Meal Journal · 2025</div>
+      <div class="header-label">Daily Meal Journal · 2025 &nbsp;|&nbsp; <span id="kstClock"></span></div>
       <div class="header-title">나의 식사 기록</div>
       <div class="header-subtitle">2월 27일 — 4월 30일 · 다이어트 목표</div>
     </div>
@@ -393,6 +399,10 @@ main{max-width:980px;margin:0 auto;padding:24px 16px 80px;}
   <div class="loading-text">기록을 불러오는 중...</div>
 </div>
 <main id="mainContent" style="display:none"></main>
+<div class="scroll-nav" id="scrollNav" style="display:none">
+  <button class="scroll-nav-btn" onclick="window.scrollTo({top:0,behavior:'smooth'})" title="맨 위로">↑</button>
+  <button class="scroll-nav-btn" onclick="window.scrollTo({top:document.body.scrollHeight,behavior:'smooth'})" title="맨 아래로">↓</button>
+</div>
 
 <div class="lightbox" id="lightbox" onclick="closeLightbox()">
   <div class="lightbox-meta" id="lightboxMeta"></div>
@@ -513,13 +523,17 @@ function isToday(d) {
 function formatDate(d) { return `${d.getMonth()+1}월 ${d.getDate()}일`; }
 
 function calcStreak() {
-  const today=nowKST(); today.setHours(0,0,0,0);
-  let streak=0, check=new Date(today);
-  if (!MEALS.some(m=>photoCache[`${dateKey(today)}:${m.key}`])) check.setDate(check.getDate()-1);
-  const start=new Date(2025,1,27);
-  while(check>=start) {
-    const dk=dateKey(check);
-    if(MEALS.some(m=>photoCache[`${dk}:${m.key}`])){ streak++; check.setDate(check.getDate()-1); } else break;
+  // getDates() 범위 내 날짜 기준 (앱 날짜 기준, 실제 오늘과 무관)
+  const dates = getDates();
+  // 오늘과 월/일이 같은 날짜 찾기
+  const todayInApp = dates.find(d=>isToday(d)) || dates[dates.length-1];
+  const todayIdx = dates.indexOf(todayInApp);
+  let streak=0;
+  // 오늘 기준으로 역순 체크
+  for(let i=todayIdx; i>=0; i--) {
+    const dk=dateKey(dates[i]);
+    if(MEALS.some(m=>photoCache[`${dk}:${m.key}`])) streak++;
+    else if(i < todayIdx) break; // 오늘은 아직 0이어도 연속 끊지 않음
   }
   return streak;
 }
@@ -528,12 +542,22 @@ function updateStreak() {
   el.textContent=`🔥 ${s}일 연속`; el.className='streak-badge'+(s===0?' zero':'');
 }
 function getLastMealDateTime() {
-  const dates=getDates(), now=nowKST();
-  for(let i=dates.length-1;i>=0;i--) {
-    const d=dates[i]; if(d>now) continue;
+  // 앱 날짜 기준으로 시간 기록된 가장 최근 식사 찾기
+  const dates=getDates();
+  // 오늘(월/일 기준)까지의 날짜만
+  const todayInApp = dates.find(d=>isToday(d));
+  const cutoff = todayInApp || dates[dates.length-1];
+  for(let i=dates.indexOf(cutoff); i>=0; i--) {
+    const d=dates[i];
     for(let j=MEALS.length-1;j>=0;j--) {
       const t=timesCache[timeKey(d,MEALS[j].key)];
-      if(t){ const[hh,mm]=t.split(':').map(Number); const dt=new Date(d); dt.setHours(hh,mm,0,0); if(dt<=now) return dt; }
+      if(t) {
+        const[hh,mm]=t.split(':').map(Number);
+        // 앱 날짜에 현재 연도 적용해서 계산
+        const now=nowKST();
+        const dt=new Date(now.getFullYear(), d.getMonth(), d.getDate(), hh, mm, 0, 0);
+        return dt;
+      }
     }
   }
   return null;
@@ -551,9 +575,11 @@ function updateStats() {
   document.getElementById('statLabel').textContent=`/ ${possible} 끼`;
   document.getElementById('progressFill').style.width=`${(total/possible)*100}%`;
 }
+let _toastTimer=null;
 function showToast(msg) {
   const el=document.getElementById('toast'); el.textContent=msg; el.classList.add('show');
-  setTimeout(()=>el.classList.remove('show'),2400);
+  if(_toastTimer) clearTimeout(_toastTimer);
+  _toastTimer=setTimeout(()=>{ el.classList.remove('show'); _toastTimer=null; },2400);
 }
 function openLightbox(url,date,meal) {
   document.getElementById('lightboxImg').src=url;
@@ -716,7 +742,17 @@ function buildMealTimeRow(date,meal){
     function maybeSave(){ if(selH!==null&&selM!==null){ const val=to24h(selAmpm,selH,selM); timesCache[tk]=val; fbPut('times',tk,val).catch(console.error); renderBtn(val); updateFastingTimer(); } }
     function closePicker(){ if(popup.parentNode)popup.parentNode.removeChild(popup); activePickerClose=null; document.removeEventListener('click',outsideClick); }
     function outsideClick(e){ if(!popup.contains(e.target)&&e.target!==btn)closePicker(); }
-    activePickerClose=closePicker; row.appendChild(popup);
+    // fixed 포지션으로 버튼 위치 기준 배치
+    document.body.appendChild(popup);
+    const btnRect = btn.getBoundingClientRect();
+    const popW = 220, popH = 280;
+    let top = btnRect.bottom + 4;
+    let left = btnRect.left;
+    if(left + popW > window.innerWidth - 8) left = window.innerWidth - popW - 8;
+    if(top + popH > window.innerHeight - 8) top = btnRect.top - popH - 4;
+    popup.style.top = top + 'px';
+    popup.style.left = left + 'px';
+    activePickerClose=closePicker;
     setTimeout(()=>document.addEventListener('click',outsideClick),0);
   };
   row.appendChild(btn); row.appendChild(clearBtn); return row;
@@ -756,13 +792,27 @@ function buildDayFooter(date){
   const wUnit=document.createElement('span'); wUnit.className='footer-unit'; wUnit.textContent='kg';
   wRow.appendChild(wInput); wRow.appendChild(wUnit); wBlock.appendChild(wRow); footer.appendChild(wBlock);
   const eBlock=document.createElement('div'); eBlock.className='footer-block'; eBlock.innerHTML='<div class="footer-label">💪 운동</div>';
-  const eRow=document.createElement('div'); eRow.className='footer-input-row';
-  const eType=document.createElement('input'); eType.type='text'; eType.className='footer-input w-exercise-type'; eType.placeholder='운동 종류 (예: 걷기)'; eType.value=eVal.type||''; eType.maxLength=20;
-  const eDur=document.createElement('input'); eDur.type='number'; eDur.className='footer-input w-exercise-dur'; eDur.placeholder='0'; eDur.min='0'; eDur.max='600'; eDur.value=eVal.duration||'';
-  const eUnit=document.createElement('span'); eUnit.className='footer-unit'; eUnit.textContent='분';
-  function saveEx(){ exerciseCache[ek]={type:eType.value.trim(),duration:eDur.value}; fbPut('exercise',ek,exerciseCache[ek]).catch(console.error); }
-  eType.addEventListener('blur',saveEx); eDur.addEventListener('blur',saveEx);
-  eRow.appendChild(eType); eRow.appendChild(eDur); eRow.appendChild(eUnit); eBlock.appendChild(eRow); footer.appendChild(eBlock);
+  // 운동 최대 3개, 기존 데이터 배열로 관리
+  const exList = Array.isArray(eVal) ? eVal : (eVal&&eVal.type ? [eVal] : [{}]);
+  if(exList.length===0) exList.push({});
+  const eItemsWrap = document.createElement('div'); eItemsWrap.className='exercise-items';
+  function renderExItems() {
+    eItemsWrap.innerHTML='';
+    exList.forEach((ex,idx)=>{
+      const eRow=document.createElement('div'); eRow.className='footer-input-row'; eRow.style.marginBottom='4px';
+      const eType=document.createElement('input'); eType.type='text'; eType.className='footer-input w-exercise-type'; eType.placeholder='종류'; eType.value=ex.type||''; eType.maxLength=20;
+      const eDur=document.createElement('input'); eDur.type='number'; eDur.className='footer-input w-exercise-dur'; eDur.placeholder='0'; eDur.min='0'; eDur.max='600'; eDur.value=ex.duration||'';
+      const eUnit=document.createElement('span'); eUnit.className='footer-unit'; eUnit.textContent='분';
+      function saveEx(){ exList[idx]={type:eType.value.trim(),duration:eDur.value}; exerciseCache[ek]=exList; fbPut('exercise',ek,exList).catch(console.error); }
+      eType.addEventListener('blur',saveEx); eDur.addEventListener('blur',saveEx);
+      eRow.appendChild(eType); eRow.appendChild(eDur); eRow.appendChild(eUnit);
+      if(idx>0){ const del=document.createElement('button'); del.textContent='×'; del.style.cssText='background:none;border:none;color:#C4B494;font-size:16px;cursor:pointer;padding:0 4px;'; del.onclick=()=>{ exList.splice(idx,1); exerciseCache[ek]=exList; fbPut('exercise',ek,exList).catch(console.error); renderExItems(); }; eRow.appendChild(del); }
+      eItemsWrap.appendChild(eRow);
+    });
+    if(exList.length<3){ const addBtn=document.createElement('button'); addBtn.textContent='+ 운동 추가'; addBtn.style.cssText='font-size:11px;color:var(--gold);background:none;border:none;cursor:pointer;padding:2px 0;font-family:inherit;'; addBtn.onclick=()=>{ exList.push({}); renderExItems(); }; eItemsWrap.appendChild(addBtn); }
+  }
+  renderExItems();
+  eBlock.appendChild(eItemsWrap); footer.appendChild(eBlock);
   return footer;
 }
 
@@ -984,10 +1034,18 @@ async function loadAndRender(){
   document.getElementById('loadingScreen').style.display='none';
   document.getElementById('mainContent').style.display='';
   document.getElementById('weightPanel').style.display='';
+  document.getElementById('scrollNav').style.display='';
   render(getDates()); updateStats(); updateStreak(); updateFastingTimer(); updateWeightMeta(); updateGoalBox(); 
   setTimeout(()=>drawWeightChart(),100);
   if(fastingInterval) clearInterval(fastingInterval);
   fastingInterval=setInterval(updateFastingTimer,60000);
+  function updateKstClock(){
+    const n=nowKST();
+    const hh=String(n.getHours()).padStart(2,'0'), mm=String(n.getMinutes()).padStart(2,'0'), ss=String(n.getSeconds()).padStart(2,'0');
+    const el=document.getElementById('kstClock');
+    if(el) el.textContent=`${hh}:${mm}:${ss} KST`;
+  }
+  updateKstClock(); setInterval(updateKstClock,1000);
   window.addEventListener('resize',()=>setTimeout(drawWeightChart,100));
 }
 </script>
