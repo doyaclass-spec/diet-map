@@ -5,333 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>나의 식사 기록 🍽️</title>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@300;400;600;700&family=DM+Serif+Display&display=swap" rel="stylesheet">
-<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js">
-// ── AI 오늘의 한마디 ──
-function saveApiKey() {
-  const key = document.getElementById('aiKeyInput').value.trim();
-  if(!key.startsWith('sk-ant-')) { alert('올바른 Anthropic API 키를 입력해주세요 (sk-ant-로 시작)'); return; }
-  localStorage.setItem('anthropic_api_key', key);
-  document.getElementById('aiKeyRow').style.display='none';
-  document.getElementById('aiKeyInput').value='';
-  fetchAiMessage();
-}
-
-async function fetchAiMessage() {
-  const apiKey = localStorage.getItem('anthropic_api_key');
-  if(!apiKey) { document.getElementById('aiKeyRow').style.display='flex'; return; }
-
-  const btn = document.getElementById('aiRefreshBtn');
-  const content = document.getElementById('aiContent');
-  btn.disabled = true; btn.textContent = '분석 중...';
-  content.innerHTML = '<div class="ai-loading">AI 전문가가 분석 중입니다...</div>';
-
-  // 데이터 수집
-  const dates = getDates();
-  const recentDates = dates.filter(d => {
-    const dk = dateKey(d);
-    return notesCache[`${dk}:done`] === 'true' || isToday(d);
-  }).slice(-7);
-
-  const records = recentDates.map(d => {
-    const dk = dateKey(d);
-    const meals = MEALS.map(m => {
-      const notes = (notesCache[noteKey(d, m.key)] || []).filter(n=>n&&n.trim());
-      const hasPhoto = !!photoCache[`${dk}:${m.key}`];
-      const time = timesCache[timeKey(d, m.key)] || '';
-      return `${m.label}: ${notes.length ? notes.join(', ') : '기록없음'}${time?' ('+time+')':''}`;
-    }).join(' | ');
-    const w = weightsCache[weightKey(d)];
-    const ex = exerciseCache[exKey(d)];
-    const exText = Array.isArray(ex) ? ex.filter(e=>e.type).map(e=>`${e.type} ${e.duration}분`).join(', ') : (ex&&ex.type?`${ex.type} ${ex.duration}분`:'');
-    return `[${d.getMonth()+1}/${d.getDate()}] ${meals} / 체중:${w||'?'}kg / 운동:${exText||'없음'}`;
-  }).join('
-');
-
-  // 목표 체중 달성 예측
-  const weightEntries = dates.map(d=>weightsCache[weightKey(d)]).filter(w=>typeof w==='number');
-  const goalWeight = 75;
-  let predText = '';
-  if(weightEntries.length >= 2) {
-    const first = weightEntries[0], last = weightEntries[weightEntries.length-1];
-    const diff = first - last;
-    const days = weightEntries.length;
-    const ratePerDay = diff / days;
-    if(ratePerDay > 0 && last > goalWeight) {
-      const daysNeeded = Math.round((last - goalWeight) / ratePerDay);
-      const targetDate = new Date();
-      targetDate.setDate(targetDate.getDate() + daysNeeded);
-      predText = `현재 추세: 일 평균 ${(ratePerDay*1000/1000).toFixed(3)}kg 감량. 목표 ${goalWeight}kg 달성 예상: 약 ${daysNeeded}일 후 (${targetDate.getMonth()+1}/${targetDate.getDate()})`;
-    } else if(ratePerDay <= 0) {
-      predText = '최근 체중이 감소하지 않고 있습니다. 식단과 운동을 점검해보세요.';
-    } else {
-      predText = `목표 체중 ${goalWeight}kg을 이미 달성했습니다! 🎉`;
-    }
-  }
-
-  const prompt = `당신은 10년차 다이어트 전문가입니다. 아래는 사용자의 최근 식단/운동/체중 기록입니다.
-
-${records || '아직 기록이 없습니다.'}
-
-목표 체중 달성 예측:
-${predText || '체중 데이터가 부족합니다.'}
-
-다음 3가지를 한국어로 작성해주세요 (각 섹션 앞에 이모지 포함, 전체 300자 이내):
-1. 💪 전문가 한마디 (격려와 솔직한 조언)
-2. 🍽️ 식단 피드백 (잘한 점과 개선점)
-3. 🎯 목표 달성 예측 (위 데이터 기반)
-
-친근하고 따뜻하되 전문적인 어조로 써주세요.`;
-
-  try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true'
-      },
-      body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 600,
-        messages: [{ role: 'user', content: prompt }]
-      })
-    });
-    const data = await res.json();
-    if(data.error) throw new Error(data.error.message);
-    const text = data.content?.[0]?.text || '응답을 받지 못했습니다.';
-    content.innerHTML = `<div class="ai-message">${text.replace(/
-/g,'<br>')}</div>`;
-  } catch(err) {
-    if(err.message && err.message.includes('401')) {
-      localStorage.removeItem('anthropic_api_key');
-      document.getElementById('aiKeyRow').style.display='flex';
-      content.innerHTML = '<div class="ai-error">❌ API 키가 올바르지 않습니다. 다시 입력해주세요.</div>';
-    } else {
-      content.innerHTML = `<div class="ai-error">❌ 오류: ${err.message}</div>`;
-    }
-  }
-  btn.disabled = false; btn.textContent = '✨ 다시 분석';
-}
-</script>
-<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js">
-// ── AI 오늘의 한마디 ──
-function saveApiKey() {
-  const key = document.getElementById('aiKeyInput').value.trim();
-  if(!key.startsWith('sk-ant-')) { alert('올바른 Anthropic API 키를 입력해주세요 (sk-ant-로 시작)'); return; }
-  localStorage.setItem('anthropic_api_key', key);
-  document.getElementById('aiKeyRow').style.display='none';
-  document.getElementById('aiKeyInput').value='';
-  fetchAiMessage();
-}
-
-async function fetchAiMessage() {
-  const apiKey = localStorage.getItem('anthropic_api_key');
-  if(!apiKey) { document.getElementById('aiKeyRow').style.display='flex'; return; }
-
-  const btn = document.getElementById('aiRefreshBtn');
-  const content = document.getElementById('aiContent');
-  btn.disabled = true; btn.textContent = '분석 중...';
-  content.innerHTML = '<div class="ai-loading">AI 전문가가 분석 중입니다...</div>';
-
-  // 데이터 수집
-  const dates = getDates();
-  const recentDates = dates.filter(d => {
-    const dk = dateKey(d);
-    return notesCache[`${dk}:done`] === 'true' || isToday(d);
-  }).slice(-7);
-
-  const records = recentDates.map(d => {
-    const dk = dateKey(d);
-    const meals = MEALS.map(m => {
-      const notes = (notesCache[noteKey(d, m.key)] || []).filter(n=>n&&n.trim());
-      const hasPhoto = !!photoCache[`${dk}:${m.key}`];
-      const time = timesCache[timeKey(d, m.key)] || '';
-      return `${m.label}: ${notes.length ? notes.join(', ') : '기록없음'}${time?' ('+time+')':''}`;
-    }).join(' | ');
-    const w = weightsCache[weightKey(d)];
-    const ex = exerciseCache[exKey(d)];
-    const exText = Array.isArray(ex) ? ex.filter(e=>e.type).map(e=>`${e.type} ${e.duration}분`).join(', ') : (ex&&ex.type?`${ex.type} ${ex.duration}분`:'');
-    return `[${d.getMonth()+1}/${d.getDate()}] ${meals} / 체중:${w||'?'}kg / 운동:${exText||'없음'}`;
-  }).join('
-');
-
-  // 목표 체중 달성 예측
-  const weightEntries = dates.map(d=>weightsCache[weightKey(d)]).filter(w=>typeof w==='number');
-  const goalWeight = 75;
-  let predText = '';
-  if(weightEntries.length >= 2) {
-    const first = weightEntries[0], last = weightEntries[weightEntries.length-1];
-    const diff = first - last;
-    const days = weightEntries.length;
-    const ratePerDay = diff / days;
-    if(ratePerDay > 0 && last > goalWeight) {
-      const daysNeeded = Math.round((last - goalWeight) / ratePerDay);
-      const targetDate = new Date();
-      targetDate.setDate(targetDate.getDate() + daysNeeded);
-      predText = `현재 추세: 일 평균 ${(ratePerDay*1000/1000).toFixed(3)}kg 감량. 목표 ${goalWeight}kg 달성 예상: 약 ${daysNeeded}일 후 (${targetDate.getMonth()+1}/${targetDate.getDate()})`;
-    } else if(ratePerDay <= 0) {
-      predText = '최근 체중이 감소하지 않고 있습니다. 식단과 운동을 점검해보세요.';
-    } else {
-      predText = `목표 체중 ${goalWeight}kg을 이미 달성했습니다! 🎉`;
-    }
-  }
-
-  const prompt = `당신은 10년차 다이어트 전문가입니다. 아래는 사용자의 최근 식단/운동/체중 기록입니다.
-
-${records || '아직 기록이 없습니다.'}
-
-목표 체중 달성 예측:
-${predText || '체중 데이터가 부족합니다.'}
-
-다음 3가지를 한국어로 작성해주세요 (각 섹션 앞에 이모지 포함, 전체 300자 이내):
-1. 💪 전문가 한마디 (격려와 솔직한 조언)
-2. 🍽️ 식단 피드백 (잘한 점과 개선점)
-3. 🎯 목표 달성 예측 (위 데이터 기반)
-
-친근하고 따뜻하되 전문적인 어조로 써주세요.`;
-
-  try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true'
-      },
-      body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 600,
-        messages: [{ role: 'user', content: prompt }]
-      })
-    });
-    const data = await res.json();
-    if(data.error) throw new Error(data.error.message);
-    const text = data.content?.[0]?.text || '응답을 받지 못했습니다.';
-    content.innerHTML = `<div class="ai-message">${text.replace(/
-/g,'<br>')}</div>`;
-  } catch(err) {
-    if(err.message && err.message.includes('401')) {
-      localStorage.removeItem('anthropic_api_key');
-      document.getElementById('aiKeyRow').style.display='flex';
-      content.innerHTML = '<div class="ai-error">❌ API 키가 올바르지 않습니다. 다시 입력해주세요.</div>';
-    } else {
-      content.innerHTML = `<div class="ai-error">❌ 오류: ${err.message}</div>`;
-    }
-  }
-  btn.disabled = false; btn.textContent = '✨ 다시 분석';
-}
-</script>
-<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js">
-// ── AI 오늘의 한마디 ──
-function saveApiKey() {
-  const key = document.getElementById('aiKeyInput').value.trim();
-  if(!key.startsWith('sk-ant-')) { alert('올바른 Anthropic API 키를 입력해주세요 (sk-ant-로 시작)'); return; }
-  localStorage.setItem('anthropic_api_key', key);
-  document.getElementById('aiKeyRow').style.display='none';
-  document.getElementById('aiKeyInput').value='';
-  fetchAiMessage();
-}
-
-async function fetchAiMessage() {
-  const apiKey = localStorage.getItem('anthropic_api_key');
-  if(!apiKey) { document.getElementById('aiKeyRow').style.display='flex'; return; }
-
-  const btn = document.getElementById('aiRefreshBtn');
-  const content = document.getElementById('aiContent');
-  btn.disabled = true; btn.textContent = '분석 중...';
-  content.innerHTML = '<div class="ai-loading">AI 전문가가 분석 중입니다...</div>';
-
-  // 데이터 수집
-  const dates = getDates();
-  const recentDates = dates.filter(d => {
-    const dk = dateKey(d);
-    return notesCache[`${dk}:done`] === 'true' || isToday(d);
-  }).slice(-7);
-
-  const records = recentDates.map(d => {
-    const dk = dateKey(d);
-    const meals = MEALS.map(m => {
-      const notes = (notesCache[noteKey(d, m.key)] || []).filter(n=>n&&n.trim());
-      const hasPhoto = !!photoCache[`${dk}:${m.key}`];
-      const time = timesCache[timeKey(d, m.key)] || '';
-      return `${m.label}: ${notes.length ? notes.join(', ') : '기록없음'}${time?' ('+time+')':''}`;
-    }).join(' | ');
-    const w = weightsCache[weightKey(d)];
-    const ex = exerciseCache[exKey(d)];
-    const exText = Array.isArray(ex) ? ex.filter(e=>e.type).map(e=>`${e.type} ${e.duration}분`).join(', ') : (ex&&ex.type?`${ex.type} ${ex.duration}분`:'');
-    return `[${d.getMonth()+1}/${d.getDate()}] ${meals} / 체중:${w||'?'}kg / 운동:${exText||'없음'}`;
-  }).join('
-');
-
-  // 목표 체중 달성 예측
-  const weightEntries = dates.map(d=>weightsCache[weightKey(d)]).filter(w=>typeof w==='number');
-  const goalWeight = 75;
-  let predText = '';
-  if(weightEntries.length >= 2) {
-    const first = weightEntries[0], last = weightEntries[weightEntries.length-1];
-    const diff = first - last;
-    const days = weightEntries.length;
-    const ratePerDay = diff / days;
-    if(ratePerDay > 0 && last > goalWeight) {
-      const daysNeeded = Math.round((last - goalWeight) / ratePerDay);
-      const targetDate = new Date();
-      targetDate.setDate(targetDate.getDate() + daysNeeded);
-      predText = `현재 추세: 일 평균 ${(ratePerDay*1000/1000).toFixed(3)}kg 감량. 목표 ${goalWeight}kg 달성 예상: 약 ${daysNeeded}일 후 (${targetDate.getMonth()+1}/${targetDate.getDate()})`;
-    } else if(ratePerDay <= 0) {
-      predText = '최근 체중이 감소하지 않고 있습니다. 식단과 운동을 점검해보세요.';
-    } else {
-      predText = `목표 체중 ${goalWeight}kg을 이미 달성했습니다! 🎉`;
-    }
-  }
-
-  const prompt = `당신은 10년차 다이어트 전문가입니다. 아래는 사용자의 최근 식단/운동/체중 기록입니다.
-
-${records || '아직 기록이 없습니다.'}
-
-목표 체중 달성 예측:
-${predText || '체중 데이터가 부족합니다.'}
-
-다음 3가지를 한국어로 작성해주세요 (각 섹션 앞에 이모지 포함, 전체 300자 이내):
-1. 💪 전문가 한마디 (격려와 솔직한 조언)
-2. 🍽️ 식단 피드백 (잘한 점과 개선점)
-3. 🎯 목표 달성 예측 (위 데이터 기반)
-
-친근하고 따뜻하되 전문적인 어조로 써주세요.`;
-
-  try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true'
-      },
-      body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 600,
-        messages: [{ role: 'user', content: prompt }]
-      })
-    });
-    const data = await res.json();
-    if(data.error) throw new Error(data.error.message);
-    const text = data.content?.[0]?.text || '응답을 받지 못했습니다.';
-    content.innerHTML = `<div class="ai-message">${text.replace(/
-/g,'<br>')}</div>`;
-  } catch(err) {
-    if(err.message && err.message.includes('401')) {
-      localStorage.removeItem('anthropic_api_key');
-      document.getElementById('aiKeyRow').style.display='flex';
-      content.innerHTML = '<div class="ai-error">❌ API 키가 올바르지 않습니다. 다시 입력해주세요.</div>';
-    } else {
-      content.innerHTML = `<div class="ai-error">❌ 오류: ${err.message}</div>`;
-    }
-  }
-  btn.disabled = false; btn.textContent = '✨ 다시 분석';
-}
-</script>
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
 
 <style>
 :root {
@@ -794,6 +470,24 @@ header { position:relative; overflow:hidden; }
 @keyframes overlayIn{from{opacity:0}to{opacity:1}}
 @keyframes modalIn{from{opacity:0;transform:scale(.92) translateY(10px)}to{opacity:1;transform:scale(1) translateY(0)}}
 @keyframes txtFade{0%,100%{opacity:.5}50%{opacity:1}}
+
+.ai-sections{display:flex;flex-direction:column;gap:12px;}
+.ai-section{border-radius:12px;padding:14px 16px;}
+.ai-section.s1{background:rgba(255,200,80,.05);border:1px solid rgba(255,200,80,.13);}
+.ai-section.s2{background:rgba(100,220,120,.04);border:1px solid rgba(100,220,120,.11);}
+.ai-section.s3{background:rgba(100,160,255,.05);border:1px solid rgba(100,160,255,.13);}
+.ai-sec-head{display:flex;align-items:center;gap:7px;margin-bottom:9px;}
+.ai-sec-icon{font-size:17px;}
+.ai-sec-title{font-size:11px;font-weight:700;color:#C4943A;letter-spacing:.8px;}
+.ai-sec-body{font-size:13px;color:#D8C090;line-height:2;}
+.ai-sec-body strong{color:#F5E6C0;}
+.ai-cheer{text-align:center;font-size:14px;color:#D4A85C;padding:8px 0 2px;font-weight:600;}
+
+.ai-panel-toggle{font-size:11px;color:#6A5030;transition:transform .3s;user-select:none;line-height:1;}
+.ai-panel-toggle.collapsed{transform:rotate(-90deg);}
+.ai-content{transition:max-height .35s cubic-bezier(.4,0,.2,1),opacity .25s;overflow:hidden;max-height:1200px;opacity:1;}
+.ai-content.collapsed{max-height:0;opacity:0;padding-top:0;padding-bottom:0;}
+.ai-panel-header:hover{background:rgba(255,255,255,.02);}
 </style>
 </head>
 <body>
@@ -884,15 +578,16 @@ header { position:relative; overflow:hidden; }
 <!-- AI 오늘의 한마디 -->
 <div class="ai-panel" id="aiPanel" style="display:none">
   <div class="ai-panel-box">
-    <div class="ai-panel-header">
-      <div class="ai-panel-title"><span>🤖</span><span>AI 오늘의 한마디</span><span class="ai-badge">10년차 다이어트 전문가</span></div>
+    <div class="ai-panel-header" onclick="toggleAiPanel()" style="cursor:pointer">
+      <div class="ai-panel-title"><span>🤖</span><span>10년차 다이어트 전문가의 오늘의 한마디</span></div>
       <div class="ai-header-btns">
-        <button class="ai-key-btn" id="aiKeyBtn" onclick="openApiKeyModal()" title="API 키 설정">🔑</button>
-        <button class="ai-refresh-btn" id="aiRefreshBtn" onclick="fetchAiMessage()">✨ 분석하기</button>
+        <button class="ai-key-btn" id="aiKeyBtn" onclick="event.stopPropagation();openApiKeyModal()" title="API 키 설정">🔑</button>
+        <button class="ai-refresh-btn" id="aiRefreshBtn" onclick="fetchAiMessage()" style="display:none">분석</button>
+        <span class="ai-panel-toggle" id="aiPanelToggle">▼</span>
       </div>
     </div>
-    <div class="ai-content" id="aiContent">
-      <div class="ai-placeholder">✨ 분석하기를 눌러 AI 전문가의 조언을 받아보세요</div>
+    <div class="ai-content" id="aiContent" style="">
+      <div class="ai-placeholder">✨ 헤더를 눌러 AI 전문가의 조언을 받아보세요</div>
     </div>
   </div>
 </div>
@@ -1657,6 +1352,57 @@ function saveApiKeyModal() {
 // 구 saveApiKey 호환
 function saveApiKey() { saveApiKeyModal(); }
 
+
+function toggleAiPanel() {
+  const content = document.getElementById('aiContent');
+  const toggle = document.getElementById('aiPanelToggle');
+  const isCollapsed = content.classList.contains('collapsed');
+  if(isCollapsed) {
+    content.classList.remove('collapsed');
+    toggle.classList.remove('collapsed');
+    // 처음 열 때 분석 아직 안 했으면 자동 실행
+    if(content.querySelector('.ai-placeholder')) fetchAiMessage();
+  } else {
+    content.classList.add('collapsed');
+    toggle.classList.add('collapsed');
+  }
+}
+
+function formatAiMessage(text) {
+  const sectionMap = [
+    { emoji: '💪', cls: 's1', title: '전문가 한마디' },
+    { emoji: '🍽️', cls: 's2', title: '식단 피드백' },
+    { emoji: '🎯', cls: 's3', title: '목표 달성 예측' },
+  ];
+  let cleaned = text
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/\*([^*]+)\*/g, '$1')
+    .replace(/# /g, '');
+  const sectionParts = cleaned.match(/(?:💪|🍽️|🎯)[^💪🍽️🎯]*/g) || [];
+  if(sectionParts.length === 0) {
+    return '<div class="ai-message">' + cleaned.replace(/\n/g,'<br>') + '</div>';
+  }
+  let html = '<div class="ai-sections">';
+  sectionParts.forEach((part, i) => {
+    const map = sectionMap[i] || { cls: 's1', title: '' };
+    const icon = part.match(/^(💪|🍽️|🎯)/)?.[1] || '';
+    const body = part.replace(/^(💪|🍽️|🎯)\s*[^\n]*\n?/, '').trim();
+    const bodyHtml = body.replace(/\n/g,'<br>').replace(/- /g,'• ');
+    html += '<div class="ai-section ' + map.cls + '">';
+    html += '<div class="ai-sec-head"><span class="ai-sec-icon">' + icon + '</span><span class="ai-sec-title">' + map.title + '</span></div>';
+    html += '<div class="ai-sec-body">' + bodyHtml + '</div>';
+    html += '</div>';
+  });
+  // 마지막 화이팅 줄
+  const lines = cleaned.split('\n').map(l=>l.trim()).filter(l=>l);
+  const lastLine = lines[lines.length-1] || '';
+  if(lastLine && !lastLine.match(/💪|🍽️|🎯|잘한|개선|전문|식단|목표|체중|추세|기록/)) {
+    html += '<div class="ai-cheer">' + lastLine + '</div>';
+  }
+  html += '</div>';
+  return html;
+}
+
 async function fetchAiMessage() {
   const apiKey = localStorage.getItem('anthropic_api_key');
   if(!apiKey) { openApiKeyModal(); return; }
@@ -1739,7 +1485,7 @@ ${predText || '체중 데이터가 부족합니다.'}
     const data = await res.json();
     if(data.error) throw new Error(data.error.message);
     const text = data.content?.[0]?.text || '응답을 받지 못했습니다.';
-    content.innerHTML = `<div class="ai-message">${text.replace(/\n/g,'<br>')}</div>`;
+    content.innerHTML = formatAiMessage(text);
   } catch(err) {
     if(err.message && err.message.includes('401')) {
       localStorage.removeItem('anthropic_api_key');
